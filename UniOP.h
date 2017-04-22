@@ -1,12 +1,13 @@
-/*
- * UniOP.h
- *
- *  Created on: Jul 20, 2016
- *      Author: mason
- */
-
 #ifndef UNIOP_H_
 #define UNIOP_H_
+
+/*
+*  UniOP.h:
+*  a simple feed forward neural operation, unary input.
+*
+*  Created on: Apr 22, 2017
+*      Author: mszhang
+*/
 
 #include "Param.h"
 #include "MyLib.h"

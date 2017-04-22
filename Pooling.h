@@ -1,6 +1,14 @@
 #ifndef POOLING
 #define POOLING
 
+/*
+*  Pooling.h:
+*  pool operation, max, min, average and sum pooling
+*
+*  Created on: Apr 22, 2017
+*      Author: mszhang
+*/
+
 #include "MyLib.h"
 #include "Node.h"
 #include "Graph.h"
@@ -67,7 +75,7 @@ public:
 
 };
 
-class MaxPoolNode : PoolNode {
+struct MaxPoolNode : PoolNode {
 public:
   MaxPoolNode() : PoolNode() {
     node_type = "max-pooling";
@@ -117,7 +125,7 @@ public:
 };
 
 
-class SumPoolNode : PoolNode {
+struct SumPoolNode : PoolNode {
 public:
   SumPoolNode() : PoolNode() {
     node_type = "sum-pooling";
@@ -158,7 +166,7 @@ public:
 };
 
 
-class MinPoolNode : PoolNode {
+struct MinPoolNode : PoolNode {
 public:
   MinPoolNode() : PoolNode() {
     node_type = "min-pooling";
@@ -210,7 +218,7 @@ public:
 
 
 
-class AvgPoolNode : PoolNode {
+struct AvgPoolNode : PoolNode {
 public:
   AvgPoolNode() : PoolNode() {
     node_type = "avg-pooling";

@@ -15,10 +15,12 @@
 #include "Param.h"
 #include "SparseParam.h"
 #include "ModelUpdate.h"
+#include "CheckGrad.h"
 #include "Pooling.h"
 #include "Concat.h"
 #include "Windowlized.h"
 #include "UniOP.h"
+#include "SoftMaxLoss.h"
 
 
 
