@@ -14,7 +14,7 @@
 #include "Node.h"
 #include "Graph.h"
 
-struct ConcatNode : Node{
+class ConcatNode : public Node{
 public:
 	int nSize;
 	vector<int> inDims;
@@ -135,7 +135,7 @@ public:
 
 
  public:
-   inline PExcute generate();
+   inline PExecute generate();
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -179,7 +179,7 @@ public:
 };
 
 
-struct ConcatExcute :Excute {
+class ConcatExecute : public Execute {
 public:
   inline void  forward() {
     int count = batch.size();
@@ -200,8 +200,8 @@ public:
 };
 
 
-inline PExcute ConcatNode::generate() {
-  ConcatExcute* exec = new ConcatExcute();
+inline PExecute ConcatNode::generate() {
+  ConcatExecute* exec = new ConcatExecute();
   exec->batch.push_back(this);
   return exec;
 }

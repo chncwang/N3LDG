@@ -18,7 +18,7 @@
 using namespace Eigen;
 
 
-struct DropoutNode : Node {
+class DropoutNode : public Node{
 public:
   PNode in;
   vector<int> ids;
@@ -28,6 +28,10 @@ public:
   DropoutNode() : Node(){
     node_type = "bucket";
 	}
+
+  ~DropoutNode() {
+    ids.clear();
+  }
 public:
 	virtual inline void clearValue(){
 		Node::clearValue();
@@ -102,7 +106,7 @@ public:
   }
 
 public:
-  inline PExcute generate();
+  inline PExecute generate();
 
   // better to rewrite for deep understanding
   inline bool typeEqual(PNode other) {
@@ -113,7 +117,7 @@ public:
 
 
 
-struct DropoutExcute : Excute {
+class DropoutExecute : public Execute {
 public:
   inline void  forward() {
     int count = batch.size();
@@ -134,8 +138,8 @@ public:
 };
 
 
-inline PExcute DropoutNode::generate() {
-  DropoutExcute* exec = new DropoutExcute();
+inline PExecute DropoutNode::generate() {
+  DropoutExecute* exec = new DropoutExecute();
   exec->batch.push_back(this);
   return exec;
 }

@@ -12,7 +12,8 @@
 #include "BaseParam.h"
 
  // Notice: aux is an auxiliary variable to help parameter updating
-struct Param : BaseParam {
+class Param : public BaseParam {
+public:
 	Tensor2D aux_square;
 	Tensor2D aux_mean;
 	int iter;

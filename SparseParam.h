@@ -12,7 +12,8 @@
 
  // Notice: aux_square is an aux_squareiliary variable to help parameter updating
  // The in-out dimension definiation is different with dense parameters.
-struct SparseParam : BaseParam {
+class SparseParam : public BaseParam {
+public:
   Tensor2D aux_square;
   Tensor2D aux_mean;
   unordered_set<int> indexers;

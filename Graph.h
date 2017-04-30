@@ -23,7 +23,7 @@ class Graph {
 public:
   bool train;
 protected:
-  vector<PExcute> execs; //backward
+  vector<PExecute> execs; //backward
   vector<PNode> nodes; //forward
   vector<PNode> free_nodes;
   vector<PNode> finish_nodes;
@@ -75,7 +75,7 @@ public:
 
     while (free_count > 0) {
 
-      vector<PExcute> cur_execs;
+      vector<PExecute> cur_execs;
       int cur_execs_size = 0;
 
       for (int idx = 0; idx < free_count; idx++) {
@@ -88,7 +88,7 @@ public:
         }
 
         if (!find) {
-          PExcute new_exec = free_nodes[idx]->generate();
+          PExecute new_exec = free_nodes[idx]->generate();
           cur_execs.push_back(new_exec);
           cur_execs_size++;
         }

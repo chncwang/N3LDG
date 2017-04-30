@@ -15,7 +15,7 @@
 #include "Graph.h"
 #include "ModelUpdate.h"
 
-struct UniParams {
+class UniParams {
 public:
   Param W;
   Param b;
@@ -65,7 +65,7 @@ public:
 // input nodes should be specified by forward function
 // for input variables, we exploit column vector,
 // which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
-struct UniNode : Node {
+class UniNode : public Node {
 public:
   PNode in;
   UniParams* param;
@@ -80,6 +80,10 @@ public:
     derivate = dtanh;
     param = NULL;
     node_type = "uni";
+  }
+
+  ~UniNode() {
+    in = NULL;
   }
 
 
@@ -111,7 +115,7 @@ public:
   }
 
 public:
-  inline PExcute generate();
+  inline PExecute generate();
 
   // better to rewrite for deep understanding
   inline bool typeEqual(PNode other) {
@@ -129,7 +133,7 @@ public:
 // input nodes should be specified by forward function
 // for input variables, we exploit column vector,
 // which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
-struct LinearUniNode : Node {
+class LinearUniNode : public Node {
 public:
   PNode in;
   UniParams* param;
@@ -165,7 +169,7 @@ public:
   }
 
 public:
-  inline PExcute generate();
+  inline PExecute generate();
 
   // better to rewrite for deep understanding
   inline bool typeEqual(PNode other) {
@@ -185,7 +189,7 @@ public:
 // input nodes should be specified by forward function
 // for input variables, we exploit column vector,
 // which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
-struct LinearNode : Node {
+class LinearNode : public Node {
 public:
   PNode in;
   UniParams* param;
@@ -221,7 +225,7 @@ public:
   }
 
 public:
-  inline PExcute generate();
+  inline PExecute generate();
 
   // better to rewrite for deep understanding
   inline bool typeEqual(PNode other) {
@@ -236,16 +240,26 @@ public:
 };
 
 
-struct UniExcute :Excute {
+class UniExecute :public Execute {
+public:
   Tensor2D x, ty, y, b;
-  int inDim, outDim, count;
+  int inDim, outDim;
   UniParams* param;
   dtype(*activate)(const dtype&);   // activation function
   dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
 
 public:
+  ~UniExecute() {
+    param = NULL;
+    activate = NULL;
+    derivate = NULL;
+    inDim = outDim = 0;
+  }
+
+
+public:
   inline void  forward() {
-    count = batch.size();
+    int count = batch.size();
     x.init(inDim, count);
     b.init(outDim, count);
     ty.init(outDim, count);
@@ -281,6 +295,7 @@ public:
   }
 
   inline void backward() {
+    int count = batch.size();
     Tensor2D lx, lty, ly;
     lx.init(inDim, count);
     lty.init(outDim, count);
@@ -317,7 +332,8 @@ public:
   }
 };
 
-struct LinearUniExcute :Excute {
+class LinearUniExecute :public Execute {
+public:
   Tensor2D x, y, b;
   int inDim, outDim, count;
   UniParams* param;
@@ -391,7 +407,8 @@ public:
 };
 
 
-struct LinearExcute :Excute {
+class LinearExecute :public Execute {
+public:
   Tensor2D x, y;
   int inDim, outDim, count;
   UniParams* param;
@@ -447,8 +464,8 @@ public:
 };
 
 
-inline PExcute UniNode::generate() {
-  UniExcute* exec = new UniExcute();
+inline PExecute UniNode::generate() {
+  UniExecute* exec = new UniExecute();
   exec->batch.push_back(this);
   exec->inDim = param->W.inDim();
   exec->outDim = param->W.outDim();
@@ -459,8 +476,8 @@ inline PExcute UniNode::generate() {
 }
 
 
-inline PExcute LinearUniNode::generate() {
-  LinearUniExcute* exec = new LinearUniExcute();
+inline PExecute LinearUniNode::generate() {
+  LinearUniExecute* exec = new LinearUniExecute();
   exec->batch.push_back(this);
   exec->inDim = param->W.inDim();
   exec->outDim = param->W.outDim();
@@ -468,8 +485,8 @@ inline PExcute LinearUniNode::generate() {
   return exec;
 }
 
-inline PExcute LinearNode::generate() {
-  LinearExcute* exec = new LinearExcute();
+inline PExecute LinearNode::generate() {
+  LinearExecute* exec = new LinearExecute();
   exec->batch.push_back(this);
   exec->inDim = param->W.inDim();
   exec->outDim = param->W.outDim();

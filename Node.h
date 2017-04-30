@@ -16,11 +16,11 @@
 #include "MyTensor.h"
 
 
-struct Excute;
+class Execute;
 
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
-struct Node {
+class Node {
 public:
   vector<Node*> parents;
 public:
@@ -40,6 +40,14 @@ public:
     node_type = "interface";
 	}
 
+  virtual ~Node() {
+    val = 0;
+    loss = 0;
+    degree = 0;
+    parents.clear();
+    node_type.clear();
+  }
+
 
 public:
 	virtual inline void clearValue(){
@@ -58,7 +66,7 @@ public:
 
 public:
 
-  virtual inline Excute* generate() = 0;
+  virtual inline Execute* generate() = 0;
 
   virtual inline bool typeEqual(Node* other) {
     if (node_type.compare(other->node_type) == 0) {
@@ -73,9 +81,14 @@ public:
 typedef  Node* PNode;
 
 
-struct Excute {
+class Execute {
 public:
   vector<PNode> batch;
+
+public:
+  virtual ~Execute() {
+    batch.clear();
+  }
 
 public:
   virtual inline void forward() = 0;
@@ -98,6 +111,6 @@ public:
 };
 
 
-typedef  Excute* PExcute;
+typedef  Execute* PExecute;
 
 #endif

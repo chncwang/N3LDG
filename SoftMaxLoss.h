@@ -6,7 +6,7 @@
 #include "Node.h"
 
 
-struct SoftMaxLoss{
+class SoftMaxLoss{
 public:
 	inline dtype loss(PNode x, const vector<dtype> &answer, Metric& eval, int batchsize = 1){
 		int nDim = x->dim;

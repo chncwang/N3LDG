@@ -14,7 +14,7 @@
 #include "Graph.h"
 
 
-struct PoolNode : Node {
+class PoolNode : public Node{
 public:
   vector<Tensor1D> masks;
   vector<PNode> ins;
@@ -52,7 +52,7 @@ public:
 
 
 public:
-  inline PExcute generate();
+  inline PExecute generate();
 
   // better to rewrite for deep understanding
   inline bool typeEqual(PNode other) {
@@ -75,7 +75,7 @@ public:
 
 };
 
-struct MaxPoolNode : PoolNode {
+class MaxPoolNode : public PoolNode {
 public:
   MaxPoolNode() : PoolNode() {
     node_type = "max-pooling";
@@ -125,7 +125,7 @@ public:
 };
 
 
-struct SumPoolNode : PoolNode {
+class SumPoolNode : public PoolNode {
 public:
   SumPoolNode() : PoolNode() {
     node_type = "sum-pooling";
@@ -166,7 +166,7 @@ public:
 };
 
 
-struct MinPoolNode : PoolNode {
+class MinPoolNode : public PoolNode {
 public:
   MinPoolNode() : PoolNode() {
     node_type = "min-pooling";
@@ -218,7 +218,7 @@ public:
 
 
 
-struct AvgPoolNode : PoolNode {
+class AvgPoolNode : public PoolNode {
 public:
   AvgPoolNode() : PoolNode() {
     node_type = "avg-pooling";
@@ -258,7 +258,7 @@ public:
 };
 
 
-struct PoolExcute :Excute {
+class PoolExecute : public Execute {
 
 public:
   inline void  forward() {
@@ -279,8 +279,8 @@ public:
   }
 };
 
-inline PExcute PoolNode::generate() {
-  PoolExcute* exec = new PoolExcute();
+inline PExecute PoolNode::generate() {
+  PoolExecute* exec = new PoolExecute();
   exec->batch.push_back(this);
   return exec;
 }

@@ -19,7 +19,7 @@ using namespace Eigen;
 
 
 
-struct BucketNode : Node {
+class BucketNode : public Node{
 public:
   BucketNode() : Node(){
     node_type = "bucket";
@@ -38,7 +38,7 @@ public:
 
 
 public:
-  inline PExcute generate();
+  inline PExecute generate();
 
   // better to rewrite for deep understanding
   inline bool typeEqual(PNode other) {
@@ -50,7 +50,7 @@ public:
 
 
 
-struct BucketExcute : Excute {
+class BucketExecute : public Execute {
 public:
   inline void  forward() {
 
@@ -63,8 +63,8 @@ public:
 };
 
 
-inline PExcute BucketNode::generate() {
-  BucketExcute* exec = new BucketExcute();
+inline PExecute BucketNode::generate() {
+  BucketExecute* exec = new BucketExecute();
   exec->batch.push_back(this);
   return exec;
 }

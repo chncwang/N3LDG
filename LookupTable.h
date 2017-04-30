@@ -16,7 +16,7 @@
 #include "Graph.h"
 #include "ModelUpdate.h"
 
-struct LookupTable {
+class LookupTable {
 public:
   PAlphabet elems;
   SparseParam E;
@@ -192,7 +192,7 @@ public:
 };
 
 
-struct LookupNode : Node {
+class LookupNode : public Node{
 public:
   LookupTable* param;
   int xid;
@@ -227,7 +227,7 @@ public:
   }
 
 public:
-  inline PExcute generate();
+  inline PExecute generate();
 
   // better to rewrite for deep understanding
   inline bool typeEqual(PNode other) {
@@ -255,7 +255,7 @@ public:
 };
 
 
-struct LookupExcute :Excute {
+class LookupExecute :public Execute {
 
 public:
   inline void  forward() {
@@ -277,8 +277,8 @@ public:
 };
 
 
-inline PExcute LookupNode::generate() {
-  LookupExcute* exec = new LookupExcute();
+inline PExecute LookupNode::generate() {
+  LookupExecute* exec = new LookupExecute();
   exec->batch.push_back(this);
   return exec;
 }

@@ -14,7 +14,8 @@
 #include "Node.h"
 #include "Graph.h"
 
-struct PMultiNode : Node {
+class PMultiNode : public Node{
+public:
   PNode in1, in2;
 public:
   PMultiNode() : Node() {
@@ -46,14 +47,19 @@ public:
     return Node::typeEqual(other);
   }
 
-  inline PExcute generate();
+  inline PExecute generate();
 };
 
 
-struct PMultiExcute :Excute {
+class PMultiExecute :public Execute {
 public:
   Tensor1D y, x1, x2;
   int sumDim;
+
+public:
+  ~PMultiExecute() {
+    sumDim = 0;
+  }
 
 public:
   inline void  forward() {
@@ -123,8 +129,8 @@ public:
 };
 
 
-inline PExcute PMultiNode::generate() {
-  PMultiExcute* exec = new PMultiExcute();
+inline PExecute PMultiNode::generate() {
+  PMultiExecute* exec = new PMultiExecute();
   exec->batch.push_back(this);
   return exec;
 }
