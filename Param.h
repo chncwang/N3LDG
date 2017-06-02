@@ -57,21 +57,13 @@ public:
 		iter++;
 	}
 
-	inline void randpoint(int& idx, int &idy) {
-		//select indexes randomly		
-		std::vector<int> idRows, idCols;
-		idRows.clear();
-		idCols.clear();
-		for (int i = 0; i < val.row; i++)
-			idRows.push_back(i);
-		for (int i = 0; i < val.col; i++)
-			idCols.push_back(i);
-
-		random_shuffle(idRows.begin(), idRows.end());
-		random_shuffle(idCols.begin(), idCols.end());
-
-		idy = idRows[0];
-		idx = idCols[0];
+	void randpoint(int& idx, int &idy) {
+    static unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+		static std::mt19937 engine(seed);
+		std::uniform_int_distribution<uint32_t> x(0, val.row - 1);
+		idx = x(engine);
+		std::uniform_int_distribution<uint32_t> y(0, val.col - 1);
+		idy = y(engine);
 	}
 
 	inline dtype squareGradNorm() {
