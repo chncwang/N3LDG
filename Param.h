@@ -57,7 +57,7 @@ public:
 		iter++;
 	}
 
-	void randpoint(int& idx, int &idy) {
+	void randpoint(int& idx, int &idy) const {
     static unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 		static std::mt19937 engine(seed);
 		std::uniform_int_distribution<uint32_t> x(0, val.row - 1);

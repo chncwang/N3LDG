@@ -81,7 +81,7 @@ public:
     }
   }
 
-  inline void randpoint(int& idx, int &idy) {
+  void randpoint(int& idx, int &idy) const {
     //select indexes randomly		
     std::vector<int> idRows, idCols;
     idRows.clear();
