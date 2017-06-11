@@ -28,7 +28,7 @@ public:
 	Tensor1D loss;
 public:
 	int dim;
-	int degree;
+	int degree; //means indegree
   string node_type;
 
 	

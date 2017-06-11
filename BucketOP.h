@@ -33,6 +33,7 @@ public:
 	void forward(Graph *cg, dtype value) {
     val = value;
     loss = 0;
+    degree = 0;
 		cg->addNode(this);
 	}
 

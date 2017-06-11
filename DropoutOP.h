@@ -18,49 +18,43 @@
 using namespace Eigen;
 
 
-class DropoutNode : public Node{
+class DropoutNode : public Node {
 public:
   PNode in;
   vector<int> ids;
   dtype dropvalue;
   bool bTrain;
 public:
-  DropoutNode() : Node(){
-    node_type = "bucket";
-	}
+  DropoutNode() : Node() {
+    node_type = "drop";
+  }
 
   ~DropoutNode() {
     ids.clear();
   }
+
 public:
-	virtual inline void clearValue(){
-		Node::clearValue();
+  virtual inline void clearValue() {
+    Node::clearValue();
     ids.clear();
     bTrain = false;
-	}
+  }
 
   inline void setParam(dtype ratio) {
-    if (ratio <= 0) {
-      dropvalue = 0;
-    }
-    else if (ratio >= 1) {
-      dropvalue = 1;
-    }
-    else {
-      dropvalue = ratio;
-    }
+    assert(ratio >= 0 && ratio <= 1);
+    dropvalue = ratio;
   }
 
 public:
-	void forward(Graph *cg, PNode x) {
+  void forward(Graph *cg, PNode x) {
     in = x;
     loss = 0;
     bTrain = cg->train;
 
     degree = 1;
     in->parents.push_back(this);
-		cg->addNode(this);
-	}
+    cg->addNode(this);
+  }
 
 public:
   void compute() {
@@ -70,7 +64,7 @@ public:
         indexes.push_back(i);
       }
 
-      int dropNum = (int)(dim * dropvalue);
+      int dropNum = (int) (dim * dropvalue);
       random_shuffle(indexes.begin(), indexes.end());
 
       for (int idx = 0; idx < dim; idx++) {
@@ -78,13 +72,11 @@ public:
         if (idx < dropNum) {
           val[targetId] = 0;
           ids.push_back(targetId);
-        }
-        else {
+        } else {
           val[targetId] = in->val[targetId];
         }
       }
-    }
-    else {
+    } else {
       val.vec() = in->val.vec() * (1 - dropvalue);
     }
   }
@@ -116,13 +108,12 @@ public:
 };
 
 
-
 class DropoutExecute : public Execute {
 public:
-  inline void  forward() {
+  inline void forward() {
     int count = batch.size();
     for (int idx = 0; idx < count; idx++) {
-      DropoutNode* ptr = (DropoutNode*)batch[idx];
+      DropoutNode *ptr = (DropoutNode *) batch[idx];
       ptr->compute();
     }
   }
@@ -130,7 +121,7 @@ public:
   inline void backward() {
     int count = batch.size();
     for (int idx = 0; idx < count; idx++) {
-      DropoutNode* ptr = (DropoutNode*)batch[idx];
+      DropoutNode *ptr = (DropoutNode *) batch[idx];
       ptr->backward();
     }
   }
@@ -139,11 +130,10 @@ public:
 
 
 inline PExecute DropoutNode::generate() {
-  DropoutExecute* exec = new DropoutExecute();
+  DropoutExecute *exec = new DropoutExecute();
   exec->batch.push_back(this);
   return exec;
 }
-
 
 
 #endif

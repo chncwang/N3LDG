@@ -33,7 +33,8 @@ public:
     }
   }
 
-  inline void initial(int nOSize, int nISize, bool useB = true, AlignedMemoryPool* mem = NULL) {
+  inline void initial(int nOSize, int nISize, bool useB = true,
+      AlignedMemoryPool* mem = NULL) {
     W.initial(nOSize, nISize, mem);
 
     bUseB = useB;
@@ -125,6 +126,7 @@ public:
     if (param == conv_other->param && activate == conv_other->activate && derivate == conv_other->derivate) {
       return true;
     }
+    return false;
   }
 
 };
