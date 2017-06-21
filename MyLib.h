@@ -34,7 +34,7 @@ using namespace nr;
 using namespace std;
 using namespace Eigen;
 
-#if USE_FLOAT
+#ifdef USE_FLOAT
 typedef float dtype;
 typedef Eigen::TensorMap<Eigen::Tensor<float, 1>>  Vec;
 typedef Eigen::Map<MatrixXf> Mat;

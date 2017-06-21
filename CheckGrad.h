@@ -57,6 +57,11 @@ public:
 			printf("%s, Checking gradient for %s[%d][%d]:\t", description.c_str(),
 				_names[i].c_str(), idx, idy);
 			printf("mock grad = %.18f, computed grad = %.18f\n", mockGrad, computeGrad);
+			double error = std::abs(mockGrad - computeGrad);
+			if (error >= std::pow(10, -4)) {
+				printf("check grad failed!");
+				assert(false);
+			}
 
 			_params[i]->val[idx][idy] = orginValue;
 		}

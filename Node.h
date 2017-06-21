@@ -30,6 +30,8 @@ public:
 	int dim;
 	int degree; //means indegree
   string node_type;
+  string tag; // This is just for debug, and it's OK to leave it empty.
+  std::function<void(const Vec &vec)> _backword_callback_function;// This is just for debug, and it's OK to leave it empty.
 
 	
 public:
@@ -93,7 +95,6 @@ public:
 public:
   virtual inline void forward() = 0;
   virtual inline void backward() = 0;
-
 
   inline bool addNode(PNode in) {
     if (batch.empty()) {

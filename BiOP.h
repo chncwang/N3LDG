@@ -6,9 +6,6 @@
 
 class BiParams : public MultiParams<2> {
 public:
-  void initial(int oSize, int iSize1, int iSize2, bool isBValid = true,
-      AlignedMemoryPool *pool = NULL);
-
   Param& w1() {
     return _params.at(0);
   }
@@ -18,10 +15,11 @@ public:
   }
 };
 
-void BiParams::initial(int oSize, int iSize1, int iSize2, bool isBValid,
-    AlignedMemoryPool *pool) {
-  std::array<int, 2> sizes = {iSize1, iSize2};
-  MultiParams<2>::initial(oSize, sizes, isBValid, pool);
-}
+class BiNode : public MultiNode<2> {
+public:
+	BiNode() {
+		node_type = "bi";
+	}
+};
 
 #endif

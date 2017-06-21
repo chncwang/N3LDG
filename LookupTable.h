@@ -239,6 +239,7 @@ public:
   void compute() {
     if (xid >= 0) {
       param->E.value(xid, val);
+	  //cout << "LookupTable compute val:"<< val.vec() << endl;
     }
     else {
       if (param->bFineTune)std::cout << "Caution: unknown words are not modeled !" << std::endl;

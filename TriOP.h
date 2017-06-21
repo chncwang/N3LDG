@@ -6,10 +6,6 @@
 
 class TriParams : public MultiParams<3> {
 public:
-  void initial(int oSize, int iSize1, int iSize2, int iSize3,
-      bool isBValid = true,
-      AlignedMemoryPool *pool = NULL);
-
   Param& w1() {
     return _params.at(0);
   }
@@ -23,10 +19,12 @@ public:
   }
 };
 
-void TriParams::initial(int oSize, int iSize1, int iSize2, int iSize3,
-    bool isBValid, AlignedMemoryPool *pool) {
-  std::array<int, 3> sizes = {iSize1, iSize2, iSize3};
-  MultiParams<3>::initial(oSize, sizes, isBValid, pool);
-}
+class TriNode : public MultiNode<3> {
+public:
+	TriNode() {
+		node_type = "tri";
+	}
+	~TriNode() = default;
+};
 
 #endif
