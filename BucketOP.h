@@ -20,31 +20,31 @@ using namespace Eigen;
 
 
 class BucketNode : public Node{
-public:
-  BucketNode() : Node(){
-    node_type = "bucket";
-	}
-public:
-	virtual inline void clearValue(){
-		Node::clearValue();
-	}
+  public:
+    BucketNode() : Node(){
+      node_type = "bucket";
+    }
+  public:
+    virtual inline void clearValue(){
+      Node::clearValue();
+    }
 
-public:
-	void forward(Graph *cg, dtype value) {
-    val = value;
-    loss = 0;
-    degree = 0;
-		cg->addNode(this);
-	}
+  public:
+    void forward(Graph *cg, dtype value) {
+      val = value;
+      loss = 0;
+      degree = 0;
+      cg->addNode(this);
+    }
 
 
-public:
-  inline PExecute generate();
+  public:
+    inline PExecute generate();
 
-  // better to rewrite for deep understanding
-  inline bool typeEqual(PNode other) {
-    return Node::typeEqual(other);
-  }
+    // better to rewrite for deep understanding
+    inline bool typeEqual(PNode other) {
+      return Node::typeEqual(other);
+    }
 
 };
 
@@ -52,14 +52,14 @@ public:
 
 
 class BucketExecute : public Execute {
-public:
-  inline void  forward() {
+  public:
+    inline void  forward() {
 
-  }
+    }
 
-  inline void backward() {
+    inline void backward() {
 
-  }
+    }
 
 };
 

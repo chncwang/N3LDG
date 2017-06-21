@@ -40,7 +40,7 @@ public:
   inline void clearValue(const bool& bTrain = false) {
     int count = nodes.size();
     for (int idx = 0; idx < count; idx++) {
-      nodes[idx]->clearValue();
+      nodes.at(idx)->clearValue();
     }
     nodes.clear();
     free_nodes.clear();
@@ -120,15 +120,46 @@ public:
       for (int idx = 0; idx < free_count; idx++) {
         free_nodes.push_back(new_free_nodes[idx]);
       }
-
     }
 
     if (finish_nodes.size() != all_nodes.size()) {
-      std::cout << "error" << std::endl;
+      std::cout << "finish nodes size = " << finish_nodes.size() << " all_nodes size = " << all_nodes.size() << std::endl;
+
+	  std::unordered_set<PNode> node_ptr_set;
+	  for (PNode node : finish_nodes) {
+		  node_ptr_set.insert(node);
+	  }
+
+	  for (PNode node: finish_nodes) {
+		  cout << "finished nodes:" << node->tag << endl;
+	  }
+
+	  for (PNode node : all_nodes) {
+		  if (node_ptr_set.find(node) == node_ptr_set.end()) {
+			  cout << "unfinished node:" << node->tag << endl;
+		  }
+	  }
+
+	  unordered_map<Node *, int> all_node_count_map;
+	  for (Node *node : all_nodes) {
+		  auto result = all_node_count_map.find(node);
+		  if (result == all_node_count_map.end()) {
+			  all_node_count_map[node] = 1;
+		  }
+		  else {
+			  all_node_count_map[node] += 1;
+		  }
+	  }
+
+	  for (auto it : all_node_count_map) {
+		  if (it.second > 1) {
+			  cout << "Graph compute nodetag:" << it.first->tag << " count:"<< it.second << endl;
+		  }
+	  }
+
+	  assert(false);
     }
-
   }
-
 };
 
 

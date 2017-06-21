@@ -83,6 +83,10 @@ public:
       }
       _outputs[idx].forward(cg, in_nodes);
     }
+
+	for (int i = 0; i < _window; ++i) {
+		in_nodes.at(i)->tag = "window in node " + std::to_string(i);
+	}
   }
 
 };

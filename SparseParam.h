@@ -86,8 +86,7 @@ public:
     std::vector<int> idRows, idCols;
     idRows.clear();
     idCols.clear();
-    unordered_set<int>::iterator it;
-    for (it = indexers.begin(); it != indexers.end(); ++it) {
+    for (auto it = indexers.begin(); it != indexers.end(); ++it) {
       idCols.push_back(*it);
     }
 

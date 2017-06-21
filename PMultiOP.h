@@ -23,6 +23,11 @@ public:
     in2 = NULL;
     node_type = "point-multiply";
   }
+
+  ~PMultiNode() {
+	  clearValue();
+  }
+
 public:
   virtual inline void clearValue() {
     Node::clearValue();
@@ -106,7 +111,13 @@ public:
     int offset = 0;
     for (int idx = 0; idx < count; idx++) {
       PMultiNode* ptr = (PMultiNode*)batch[idx];
+	  if (ptr->_backword_callback_function != NULL) {
+		  ptr->_backword_callback_function(ptr->loss.vec());
+	  }
       for (int idy = 0; idy < ptr->dim; idy++) {
+		 /* if (std::abs(ptr->loss[idy]) < 0.0000001) {
+			  assert(false);
+		  }*/
         ly[offset + idy] = ptr->loss[idy];
       }
       offset += ptr->dim;
@@ -119,8 +130,8 @@ public:
     for (int idx = 0; idx < count; idx++) {
       PMultiNode* ptr = (PMultiNode*)batch[idx];
       for (int idy = 0; idy < ptr->dim; idy++) {
-        ptr->in1->loss[idy] += lx1[idy];
-        ptr->in2->loss[idy] += lx2[idy];
+        ptr->in1->loss[idy] += lx1[offset + idy];
+        ptr->in2->loss[idy] += lx2[offset + idy];
       }
       offset += ptr->dim;
     }

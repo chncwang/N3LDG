@@ -122,6 +122,7 @@ public:
     int count = batch.size();
     for (int idx = 0; idx < count; idx++) {
       DropoutNode *ptr = (DropoutNode *) batch[idx];
+      
       ptr->backward();
     }
   }
