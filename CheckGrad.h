@@ -58,10 +58,6 @@ public:
 				_names[i].c_str(), idx, idy);
 			printf("mock grad = %.18f, computed grad = %.18f\n", mockGrad, computeGrad);
 			double error = std::abs(mockGrad - computeGrad);
-			if (error >= std::pow(10, -6)) {
-				printf("check grad failed!");
-				assert(false);
-			}
 
 			_params[i]->val[idx][idy] = orginValue;
 		}
