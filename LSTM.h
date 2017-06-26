@@ -9,6 +9,7 @@
 #include "Graph.h"
 #include "AddOP.h"
 #include "TanhOP.h"
+#include <memory>
 
 struct LSTMParams {
   LSTMParams() = default;
@@ -47,6 +48,32 @@ int LSTMParams::outDim() {
   return inputParams.w3().inDim();
 }
 
+class FirstCellNodeBehavior {
+public:
+	virtual void init(int outDim, AlignedMemoryPool *pool = NULL) = 0;
+	virtual void forward(Graph *graph) = 0;
+	virtual Node& getNode() = 0;
+};
+
+class BucketBehavior : public FirstCellNodeBehavior {
+public:
+	BucketBehavior() = default;
+	void init(int outDim, AlignedMemoryPool *pool = NULL) override;
+	void forward(Graph *graph) override;
+	Node& getNode() override {
+		return _bucketNode;
+	}
+	BucketNode _bucketNode;
+};
+
+void BucketBehavior::init(int outDim, AlignedMemoryPool *pool) {
+	_bucketNode.init(outDim, pool);
+}
+
+void BucketBehavior::forward(Graph *graph) {
+	_bucketNode.forward(graph, 0);
+}
+
 /* *
  * Standard convolutional LSTM builder.
  * see http://papers.nips.cc/paper/5955-convolutional-lstm-network-a-machine-learning-approach-for-precipitation-nowcasting.pdf
@@ -77,53 +104,13 @@ class LSTMBuilder {
     vector<TanhNode> _halfHiddens;
     vector<PMultiNode> _hiddens;
     BucketNode _bucketHiddenNode;
-	BucketNode _bucketCellNode;
+	std::shared_ptr<FirstCellNodeBehavior> _firstCellNodeBehavior;
     LSTMParams *_params;
 
     bool _shouldLeftToRight;
 };
 
-LSTMBuilder::LSTMBuilder() {
-  clear();
-}
-
-void LSTMBuilder::clear() {
-	for (TriNode &n : _inputGates) {
-		n.clearValue();
-	}
-	_inputGates.clear();
-
-	for (TriNode &n : _forgetGates) {
-		n.clearValue();
-	}
-	_forgetGates.clear();
-
-	for (BiNode &n : _halfCells){
-		n.clearValue();
-	}
-	_halfCells.clear();
-
-	for (PMultiNode &n : _inputFilters) {
-		_inputFilters.clear();
-	}
-
-	for (PMultiNode &n : _forgetFilters) {
-		_forgetFilters.clear();
-	}
-
-	for (PAddNode &n : _cells) {
-	_cells.clear();
-}
-	for (TriNode &n : _outputGates) {
-		n.clearValue();
-	}
-  _outputGates.clear();
-
-  for (TanhNode &n : _halfHiddens) {
-	  _halfHiddens.clear();
-  }
-  _hiddens.clear();
-
+LSTMBuilder::LSTMBuilder() : _firstCellNodeBehavior(new BucketBehavior) {
   _shouldLeftToRight = true;
   _params = NULL;
   _nSize = 0;
@@ -141,28 +128,9 @@ void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftTo
 	  _outputGates.at(i).tag = "lstm output " + std::to_string(i);
 	  _halfCells.at(i).tag = "lstm half cells " + std::to_string(i);
 	  _cells.at(i).tag = "lstm cells " + std::to_string(i);
-	  _bucketCellNode.tag = "lstm bucket cell";
-	  _bucketHiddenNode.tag = "lstm bucket hidden";
 	  _hiddens.at(i).tag = "lstm hidden " + std::to_string(i);
 	  _halfHiddens.at(i).tag = "lstm half hidden" + std::to_string(i);
 	  _forgetFilters.at(i).tag = "lstm forget filter " + std::to_string(i);
-	/*  _forgetFilters.at(i)._backword_callback_function = [i](const Vec &vec) {
-		  cout << "LSTM init forget filter i:" << i << endl;
-		  cout << "vec:" << vec << endl;
-		  if (i == 7) {
-			  cout << i << endl;
-		  }
-	  };
-	 _cells.at(i)._backword_callback_function = [i](const Vec &vec) {
-		  cout << "LSTM init cells i:" << i << endl;
-		  cout << "vec:" << vec << endl;
-		  if (i == 7) {
-			  cout << i << endl;
-		  }
-		  if (i > 100) {
-			  assert(false);
-		  }
-	  };*/
 	  _inputGates.at(i).setActivationAndDerivation(fsigmoid, dsigmoid);
 	  _forgetGates.at(i).setActivationAndDerivation(fsigmoid, dsigmoid);
 	  _outputGates.at(i).setActivationAndDerivation(fsigmoid, dsigmoid);
@@ -193,7 +161,7 @@ void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftTo
   }
 
   _bucketHiddenNode.init(outDim, pool);
-  _bucketCellNode.init(outDim, pool);
+  _firstCellNodeBehavior->init(outDim, pool);
 }
 
 void LSTMBuilder::resize(int nSize) {
@@ -218,7 +186,8 @@ void LSTMBuilder::forward(Graph *cg, const vector<PNode>& x, int words_num) {
 		assert(false);
 	}
   _nSize = x.size();
-  _bucketCellNode.forward(cg, 0);
+  _firstCellNodeBehavior->forward(cg);
+  //_bucketCellNode.forward(cg, 0);
   _bucketHiddenNode.forward(cg, 0);
   if (_shouldLeftToRight) {
     forwardFromLeftToRight(cg, x, words_num);
@@ -230,10 +199,10 @@ void LSTMBuilder::forward(Graph *cg, const vector<PNode>& x, int words_num) {
 void LSTMBuilder::forwardFromLeftToRight(Graph *graph,
     const vector<PNode> &x, int words_num) {
 
-  _inputGates.at(0).forward(graph, {x.at(0) , &_bucketHiddenNode, &_bucketCellNode});
+  _inputGates.at(0).forward(graph, {x.at(0) , &_bucketHiddenNode, &_firstCellNodeBehavior->getNode()});
   _halfCells.at(0).forward(graph, {x.at(0), &_bucketHiddenNode});
   _inputFilters.at(0).forward(graph, &_inputGates.at(0), &_halfCells.at(0));
-  _cells.at(0).forward(graph, {&_bucketCellNode, &_inputFilters.at(0)});
+  _cells.at(0).forward(graph, { &_firstCellNodeBehavior->getNode() , &_inputFilters.at(0) });
   _outputGates.at(0).forward(graph, {x.at(0), &_bucketHiddenNode, &_cells.at(0)});
   _halfHiddens.at(0).forward(graph, &_cells.at(0));
   _hiddens.at(0).forward(graph, &_halfHiddens.at(0), &_outputGates.at(0));
@@ -254,10 +223,10 @@ void LSTMBuilder::forwardFromLeftToRight(Graph *graph,
 void LSTMBuilder::forwardFromRightToLeft(Graph *graph,
     const vector<PNode> &x, int words_num) {
 	int firstIndex = words_num - 1;
-	_inputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_bucketHiddenNode, &_bucketCellNode});
+	_inputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_bucketHiddenNode, &_firstCellNodeBehavior->getNode()});
 	_halfCells.at(firstIndex).forward(graph, { x.at(firstIndex), &_bucketHiddenNode });
 	_inputFilters.at(firstIndex).forward(graph, &_inputGates.at(firstIndex), &_halfCells.at(firstIndex));
-	_cells.at(firstIndex).forward(graph, {&_bucketCellNode, &_inputFilters.at(firstIndex)});
+	_cells.at(firstIndex).forward(graph, {&_firstCellNodeBehavior->getNode(), &_inputFilters.at(firstIndex)});
 	_outputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_bucketHiddenNode, &_cells.at(firstIndex)});
 	_halfHiddens.at(firstIndex).forward(graph, &_cells.at(firstIndex));
 	_hiddens.at(firstIndex).forward(graph, &_halfHiddens.at(firstIndex), &_outputGates.at(firstIndex));
