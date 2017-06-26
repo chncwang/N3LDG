@@ -91,8 +91,6 @@ class LSTMBuilder {
     void forwardFromLeftToRight(Graph *graph, const vector<PNode> &x, int words_num);
     void forwardFromRightToLeft(Graph *graph, const vector<PNode> &x, int words_num);
 
-    int _nSize;
-
     vector<TriNode> _inputGates;
    vector<TriNode> _forgetGates;
     vector<BiNode> _halfCells;
@@ -113,7 +111,6 @@ class LSTMBuilder {
 LSTMBuilder::LSTMBuilder() : _firstCellNodeBehavior(new BucketBehavior) {
   _shouldLeftToRight = true;
   _params = NULL;
-  _nSize = 0;
 }
 
 void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight, AlignedMemoryPool *pool) {
@@ -185,9 +182,7 @@ void LSTMBuilder::forward(Graph *cg, const vector<PNode>& x, int words_num) {
 		cout << "dim not equal:x.at(0)->val.dim = " << x.at(0)->val.dim << " params->inDim() = " << _params->inDim() << endl;
 		assert(false);
 	}
-  _nSize = x.size();
   _firstCellNodeBehavior->forward(cg);
-  //_bucketCellNode.forward(cg, 0);
   _bucketHiddenNode.forward(cg, 0);
   if (_shouldLeftToRight) {
     forwardFromLeftToRight(cg, x, words_num);
