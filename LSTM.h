@@ -2,7 +2,7 @@
 #define N3LDG_LSTM_H
 
 #include "Param.h"
-#include "MyLIb.h"
+#include "MyLib.h"
 #include "Node.h"
 #include "TriOP.h"
 #include "BiOP.h"
