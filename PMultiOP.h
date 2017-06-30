@@ -58,16 +58,20 @@ public:
 
 class PMultiExecute :public Execute {
 public:
+	string tag;
   Tensor1D y, x1, x2;
   int sumDim;
 
 public:
   ~PMultiExecute() {
+	  if (y.v == NULL || x1.v == NULL || x2.v == NULL) {
+		  cout << "tag:" << tag << endl;
+	  }
     sumDim = 0;
   }
 
 public:
-  inline void  forward() {
+  void  forward() override {
     int count = batch.size();
     sumDim = 0;
     for (int idx = 0; idx < count; idx++) {
@@ -143,6 +147,7 @@ public:
 inline PExecute PMultiNode::generate() {
   PMultiExecute* exec = new PMultiExecute();
   exec->batch.push_back(this);
+  exec->tag = tag;
   return exec;
 }
 

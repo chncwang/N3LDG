@@ -84,7 +84,7 @@ class LSTMBuilder {
     ~LSTMBuilder() = default;
 
     void clear();
-    void init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight = true, AlignedMemoryPool *pool = NULL);
+    void init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight = true, AlignedMemoryPool *pool = NULL, const string &tagPrefix = "");
     void resize(int maxSize);
     void forward(Graph *cg, const vector<PNode>& x, int words_num);
 
@@ -113,7 +113,7 @@ LSTMBuilder::LSTMBuilder() : _firstCellNodeBehavior(new BucketBehavior) {
   _params = NULL;
 }
 
-void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight, AlignedMemoryPool *pool) {
+void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight, AlignedMemoryPool *pool, const string &tagPrefix) {
   _params = params;
   int upperLimitSize = _inputFilters.size();
 
@@ -125,7 +125,7 @@ void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftTo
 	  _outputGates.at(i).tag = "lstm output " + std::to_string(i);
 	  _halfCells.at(i).tag = "lstm half cells " + std::to_string(i);
 	  _cells.at(i).tag = "lstm cells " + std::to_string(i);
-	  _hiddens.at(i).tag = "lstm hidden " + std::to_string(i);
+	  _hiddens.at(i).tag = tagPrefix + " lstm hidden " + std::to_string(i);
 	  _halfHiddens.at(i).tag = "lstm half hidden" + std::to_string(i);
 	  _forgetFilters.at(i).tag = "lstm forget filter " + std::to_string(i);
 	  _inputGates.at(i).setActivationAndDerivation(fsigmoid, dsigmoid);
