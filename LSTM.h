@@ -198,7 +198,7 @@ void LSTMBuilder::forwardFromLeftToRight(Graph *graph,
   _halfCells.at(0).forward(graph, {x.at(0), &_firstHiddenNodeBehavior->getNode()});
   _inputFilters.at(0).forward(graph, &_inputGates.at(0), &_halfCells.at(0));
   _forgetFilters.at(0).forward(graph, &_firstCellNodeBehavior->getNode(), &_forgetGates.at(0));
-  _cells.at(0).forward(graph, { &_firstCellNodeBehavior->getNode() , &_inputFilters.at(0) });
+  _cells.at(0).forward(graph, { &_forgetFilters.at(0) , &_inputFilters.at(0) });
   _outputGates.at(0).forward(graph, {x.at(0), &_firstHiddenNodeBehavior->getNode(), &_cells.at(0)});
   _halfHiddens.at(0).forward(graph, &_cells.at(0));
   _hiddens.at(0).forward(graph, &_halfHiddens.at(0), &_outputGates.at(0));
