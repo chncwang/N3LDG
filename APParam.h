@@ -1,36 +1,34 @@
 /*
- * SparseParam.h
+ * APParam.h
  *
  *  Created on: Jul 25, 2016
  *      Author: mason
  */
 
-#ifndef SPARSEPARAM_H_
-#define SPARSEPARAM_H_
+#ifndef AVGPARAM_H_
+#define AVGPARAM_H_
 
 #include "BaseParam.h"
+#include "NRMat.h"
+using namespace nr;
 
- // Notice: aux_square is an aux_squareiliary variable to help parameter updating
- // The in-out dimension definiation is different with dense parameters.
-class SparseParam : public BaseParam {
-public:
-  Tensor2D aux_square;
-  Tensor2D aux_mean;
+// Notice: aux is an auxiliary variable to help parameter updating
+// The in-out dimension definiation is different with dense parameters.
+struct APParam : BaseParam {
+  Tensor2D aux;
   NRVec<bool> indexers;
+  int max_update;
   NRVec<int> last_update;
-
 
   // allow sparse and dense parameters have different parameter initialization methods
   inline void initial(int outDim, int inDim, AlignedMemoryPool* mem = NULL) {
     //not in the aligned memory pool
     val.init(outDim, inDim);
-    dtype bound = sqrt(3.0 / (outDim));
-    val.random(bound);
     grad.init(outDim, inDim);
-    aux_square.init(outDim, inDim);
-    aux_mean.init(outDim, inDim);
+    aux.init(outDim, inDim);
     indexers.resize(inDim);
     indexers = false;
+    max_update = 0;
     last_update.resize(inDim);
     last_update = 0;
   }
@@ -39,7 +37,7 @@ public:
     int inDim = indexers.size();
     for (int index = 0; index < inDim; index++) {
       if (!indexers[index]) continue;
-      for (int idx = 0; idx < grad.row; idx++) {
+      for (int idx = 0; idx < val.row; idx++) {
         grad[index][idx] = 0;
       }
     }
@@ -55,30 +53,28 @@ public:
   }
 
   inline void updateAdagrad(dtype alpha, dtype reg, dtype eps) {
+    max_update++;
     int inDim = indexers.size();
     for (int index = 0; index < inDim; index++) {
       if (!indexers[index]) continue;
-      for (int idx = 0; idx < grad.row; idx++) {
-        grad[index][idx] = grad[index][idx] + val[index][idx] * reg;
-        aux_square[index][idx] = aux_square[index][idx] + grad[index][idx] * grad[index][idx];
-        val[index][idx] = val[index][idx] - grad[index][idx] * alpha / sqrt(aux_square[index][idx] + eps);
+      for (int idx = 0; idx < val.row; idx++) {
+        aux[index][idx] += (max_update - last_update[index]) * val[index][idx] - grad[index][idx];
+        val[index][idx] = val[index][idx] - grad[index][idx];
       }
+      last_update[index] = max_update;
     }
   }
 
   inline void updateAdam(dtype belta1, dtype belta2, dtype alpha, dtype reg, dtype eps) {
-    dtype lr_t;
+    max_update++;
     int inDim = indexers.size();
     for (int index = 0; index < inDim; index++) {
       if (!indexers[index]) continue;
-      for (int idx = 0; idx < grad.row; idx++) {
-        grad[index][idx] = grad[index][idx] + val[index][idx] * reg;
-        aux_mean[index][idx] = belta1 * aux_mean[index][idx] + (1 - belta1) * grad[index][idx];
-        aux_square[index][idx] = belta2 * aux_square[index][idx] + (1 - belta2) * grad[index][idx] * grad[index][idx];
-        lr_t = alpha * sqrt(1 - pow(belta2, last_update[index] + 1)) / (1 - pow(belta1, last_update[index] + 1));
-        val[index][idx] = val[index][idx] - aux_mean[index][idx] * lr_t / sqrt(aux_square[index][idx] + eps);
+      for (int idx = 0; idx < val.row; idx++) {
+        aux[index][idx] += (max_update - last_update[index]) * val[index][idx] - grad[index][idx];
+        val[index][idx] = val[index][idx] - grad[index][idx];
       }
-      last_update[index]++;
+      last_update[index] = max_update;
     }
   }
 
@@ -127,25 +123,54 @@ public:
     }
   }
 
-  inline void value(const int& featId, Tensor1D& out) {
-    if (out.dim != val.row) {
-      std::cout << "warning: output dim not equal lookup param dim." << std::endl;
-    }
-    for (int idx = 0; idx < val.row; idx++) {
-      out[idx] = val[featId][idx];
+  inline void sumWeight(int featId) {
+    if (last_update[featId] < max_update) {
+      int times = max_update - last_update[featId];
+      for (int idx = 0; idx < val.row; idx++) {
+        aux[featId][idx] += val[featId][idx] * times;
+        last_update[featId] = max_update;
+      }
     }
   }
 
-  inline void value(const vector<int>& featIds, Tensor1D& out) {
+  inline void value(const int& featId, Tensor1D& out, const bool& bTrain) {
+    if (out.dim != val.row) {
+      std::cout << "warning: output dim not equal lookup param dim." << std::endl;
+    }
+    if (bTrain) {
+      for (int idx = 0; idx < val.row; idx++) {
+        out[idx] = val[featId][idx];
+      }
+    }
+    else {
+      sumWeight(featId);
+      for (int idx = 0; idx < val.row; idx++) {
+        out[idx] = aux[featId][idx];
+      }
+    }
+  }
+
+  inline void value(const vector<int>& featIds, Tensor1D& out, const bool& bTrain) {
     if (out.dim != val.row) {
       std::cout << "warning: output dim not equal lookup param dim." << std::endl;
     }
     int featNum = featIds.size();
     int featId;
-    for (int i = 0; i < featNum; i++) {
-      featId = featIds[i];
-      for (int idx = 0; idx < val.row; idx++) {
-        out[idx] += val[featId][idx];
+    if (bTrain) {
+      for (int i = 0; i < featNum; i++) {
+        featId = featIds[i];
+        for (int idx = 0; idx < val.row; idx++) {
+          out[idx] += val[featId][idx];
+        }
+      }
+    }
+    else {
+      for (int i = 0; i < featNum; i++) {
+        featId = featIds[i];
+        sumWeight(featId);
+        for (int idx = 0; idx < val.row; idx++) {
+          out[idx] += aux[featId][idx];
+        }
       }
     }
   }
@@ -177,18 +202,21 @@ public:
 
   inline void save(std::ofstream &os)const {
     val.save(os);
-    aux_square.save(os);
-    aux_mean.save(os);
+    aux.save(os);
+    os << max_update << std::endl;
     os << val.col << std::endl;
-    for (int idx = 0; idx < val.col; idx++) {
-      os << last_update[idx] << std::endl;
+    os << last_update[0];
+    for (int idx = 1; idx < val.col; idx++) {
+      os << " " << last_update[idx];
     }
+    os << std::endl;
   }
+
 
   inline void load(std::ifstream &is, AlignedMemoryPool* mem = NULL) {
     val.load(is);
-    aux_square.load(is);
-    aux_mean.load(is);
+    aux.load(is);
+    is >> max_update;
     int curInDim;
     is >> curInDim;
     last_update.resize(curInDim);
@@ -199,4 +227,4 @@ public:
 
 };
 
-#endif /* SPARSEPARAM_H_ */
+#endif /* AVGPARAM_H_ */

@@ -16,13 +16,11 @@
 
 class ConcatNode : public Node {
 public:
-  int nSize;
   vector<int> inDims;
   vector<PNode> ins;
 
 public:
   ConcatNode() : Node() {
-    nSize = 0;
     inDims.clear();
     ins.clear();
     node_type = "concat";
@@ -32,12 +30,8 @@ public:
     Node::clearValue();
   }
 
-  inline void init(int dim, AlignedMemoryPool *mem = NULL) {
-    Node::init(dim, mem);
-  }
-
 public:
-  void forward(Graph *cg, const vector<PNode> &x) {
+  void forward(Graph *cg, const vector<PNode>& x) {
     if (x.size() == 0) {
       std::cout << "empty inputs for concat" << std::endl;
       return;
@@ -48,9 +42,10 @@ public:
       ins.push_back(x[i]);
     }
 
-    degree = ins.size();
-    for (int i = 0; i < degree; ++i) {
-      ins[i]->parents.push_back(this);
+    degree = 0;
+    int nSize = ins.size();
+    for (int i = 0; i < nSize; ++i) {
+      ins[i]->addParent(this);
     }
 
     cg->addNode(this);
@@ -62,9 +57,9 @@ public:
     ins.push_back(x1);
     ins.push_back(x2);
 
-    degree = ins.size();
-    for (int i = 0; i < degree; ++i) {
-      ins[i]->parents.push_back(this);
+    degree = 0;
+    for (int i = 0; i < 2; ++i) {
+      ins[i]->addParent(this);
     }
 
     cg->addNode(this);
@@ -76,9 +71,9 @@ public:
     ins.push_back(x2);
     ins.push_back(x3);
 
-    degree = ins.size();
-    for (int i = 0; i < degree; ++i) {
-      ins[i]->parents.push_back(this);
+    degree = 0;
+    for (int i = 0; i < 3; ++i) {
+      ins[i]->addParent(this);
     }
 
     cg->addNode(this);
@@ -91,9 +86,9 @@ public:
     ins.push_back(x3);
     ins.push_back(x4);
 
-    degree = ins.size();
-    for (int i = 0; i < degree; ++i) {
-      ins[i]->parents.push_back(this);
+    degree = 0;
+    for (int i = 0; i < 4; ++i) {
+      ins[i]->addParent(this);
     }
 
     cg->addNode(this);
@@ -107,16 +102,15 @@ public:
     ins.push_back(x4);
     ins.push_back(x5);
 
-    degree = ins.size();
-    for (int i = 0; i < degree; ++i) {
-      ins[i]->parents.push_back(this);
+    degree = 0;
+    for (int i = 0; i < 5; ++i) {
+      ins[i]->addParent(this);
     }
 
     cg->addNode(this);
   }
 
-  void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5,
-               PNode x6) {
+  void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, PNode x6) {
     ins.clear();
     ins.push_back(x1);
     ins.push_back(x2);
@@ -125,17 +119,18 @@ public:
     ins.push_back(x5);
     ins.push_back(x6);
 
-    degree = ins.size();
-    for (int i = 0; i < degree; ++i) {
-      ins[i]->parents.push_back(this);
+    degree = 0;
+    for (int i = 0; i < 6; ++i) {
+      ins[i]->addParent(this);
     }
 
     cg->addNode(this);
   }
 
 
+
 public:
-  inline PExecute generate();
+  inline PExecute generate(bool bTrain);
 
   // better to rewrite for deep understanding
   inline bool typeEqual(PNode other) {
@@ -144,7 +139,7 @@ public:
 
 public:
   inline void compute() {
-    nSize = ins.size();
+    int nSize = ins.size();
     inDims.clear();
     int curDim = 0;
     for (int i = 0; i < nSize; ++i) {
@@ -152,7 +147,7 @@ public:
       curDim += inDims[i];
     }
     if (curDim != dim) {
-      std::cout << "input dim size not match" << std::endl;
+      std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
       return;
     }
 
@@ -167,6 +162,7 @@ public:
 
 
   void backward() {
+    int nSize = ins.size();
     int offset = 0;
     for (int i = 0; i < nSize; ++i) {
       for (int idx = 0; idx < inDims[i]; idx++) {
@@ -179,31 +175,68 @@ public:
 };
 
 
+//#if USE_GPU
+//class ConcatExecute : public Execute {
+//public:
+//  bool bTrain;
+//public:
+//  inline void  forward() {
+//    int count = batch.size();
+//    for (int idx = 0; idx < count; idx++) {
+//      ConcatNode* ptr = (ConcatNode*)batch[idx];
+//      ptr->compute();
+//      ptr->forward_drop(bTrain);
+//    }
+//  }
+//
+//  inline void backward() {
+//    int count = batch.size();
+//    for (int idx = 0; idx < count; idx++) {
+//      ConcatNode* ptr = (ConcatNode*)batch[idx];
+//      ptr->backward_drop();
+//      ptr->backward();
+//    }
+//  }
+//};
+//
+//inline PExecute ConcatNode::generate(bool bTrain) {
+//  ConcatExecute* exec = new ConcatExecute();
+//  exec->batch.push_back(this);
+//  exec->bTrain = bTrain;
+//  return exec;
+//}
+//#else
 class ConcatExecute : public Execute {
 public:
-  inline void forward() {
+  bool bTrain;
+public:
+  inline void  forward() {
     int count = batch.size();
-
+//#pragma omp parallel for schedule(static,1)
     for (int idx = 0; idx < count; idx++) {
-      ConcatNode *ptr = (ConcatNode *) batch[idx];
+      ConcatNode* ptr = (ConcatNode*)batch[idx];
       ptr->compute();
+      ptr->forward_drop(bTrain);
     }
   }
 
   inline void backward() {
     int count = batch.size();
+//#pragma omp parallel for schedule(static,1)
     for (int idx = 0; idx < count; idx++) {
-      ConcatNode *ptr = (ConcatNode *) batch[idx];
+      ConcatNode* ptr = (ConcatNode*)batch[idx];
+      ptr->backward_drop();
       ptr->backward();
     }
   }
 };
 
-
-inline PExecute ConcatNode::generate() {
-  ConcatExecute *exec = new ConcatExecute();
+inline PExecute ConcatNode::generate(bool bTrain) {
+  ConcatExecute* exec = new ConcatExecute();
   exec->batch.push_back(this);
+  exec->bTrain = bTrain;
   return exec;
 }
+//#endif
 
 #endif

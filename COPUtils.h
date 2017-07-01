@@ -8,7 +8,6 @@
 #ifndef COPUtil_H_
 #define COPUtil_H_
 #include "MyLib.h"
-#include "Node.h"
 
 const static int maxCapacity = 1 << 30;
 
@@ -75,7 +74,7 @@ inline size_t hash_func(const int& v1, const int& v2, const int& v3, const int& 
 }
 
 struct C1Feat{
-protected:
+public:
 	int id;
 	size_t seed;
 public:
@@ -92,7 +91,7 @@ public:
 };
 
 struct C2Feat{
-protected:
+public:
 	int id1, id2;
 	size_t seed;
 public:
@@ -101,7 +100,7 @@ public:
 	}
 	void setId(const int& v1, const int& v2){
 		id1 = v1;
-		id1 = v2;
+		id2 = v2;
 		seed = hash_func(v1, v2);
 	}
 	std::size_t hash_value() const{
@@ -110,7 +109,7 @@ public:
 };
 
 struct C3Feat{
-protected:
+public:
 	int id1, id2, id3;
 	size_t seed;
 public:
@@ -129,7 +128,7 @@ public:
 };
 
 struct C4Feat{
-protected:
+public:
 	int id1, id2, id3, id4;
 	size_t seed;
 public:
@@ -149,7 +148,7 @@ public:
 };
 
 struct C5Feat{
-protected:
+public:
 	int id1, id2, id3, id4, id5;
 	size_t seed;
 public:
@@ -170,7 +169,7 @@ public:
 };
 
 struct C6Feat{
-protected:
+public:
 	int id1, id2, id3, id4, id5, id6;
 	size_t seed;
 public:
@@ -192,7 +191,7 @@ public:
 };
 
 struct C7Feat{
-protected:
+public:
 	int id1, id2, id3, id4, id5, id6, id7;
 	size_t seed;
 public:
@@ -215,7 +214,7 @@ public:
 };
 
 struct CFeat{
-protected:
+public:
 	vector<int> ids;
 	size_t seed;
 	int num;
@@ -438,400 +437,5 @@ namespace std {
 };
 
 
-struct SPAddNode : Node {
-	vector<PNode> ins;
-	int nSize;
-	int dimId;
-public:
-	SPAddNode() : Node(){
-		ins.clear();
-		nSize = 0;
-		dimId = -1;
-	}
-public:
-	virtual inline void clearValue(){
-		Node::clearValue();
-		ins.clear();
-		nSize = 0;
-	}
-
-public:
-	// please better restrict col to 1
-	void forward(Graph *cg, const vector<PNode>& x, const int& dim) {
-		nSize = x.size();
-		ins.clear();
-		for (int i = 0; i < nSize; i++){
-			ins.push_back(x[i]);
-		}
-
-		forward(dim);
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, const int& dim){
-		ins.clear();
-		ins.push_back(x1);
-		nSize = 1;
-
-		forward(dim);
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, const int& dim){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		nSize = 2;
-
-		forward(dim);
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, const int& dim){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		nSize = 3;
-
-		forward(dim);
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, const int& dim){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		nSize = 4;
-
-		forward(dim);
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, const int& dim){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		ins.push_back(x5);
-		nSize = 5;
-
-		forward(dim);
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, PNode x6, const int& dim){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		ins.push_back(x5);
-		ins.push_back(x6);
-		nSize = 6;
-
-		forward(dim);
-		cg->addNode(this);
-	}
-
-
-	void backward(){
-		int oDim;
-		for (int i = 0; i < nSize; i++){
-			oDim = ins[i]->val.dim;
-			if (oDim == 1){
-				ins[i]->loss[0] += loss[0];
-			}
-			else if (dimId < oDim){
-				ins[i]->loss[dimId] += loss[0];
-			}
-		}
-	}
-
-	inline void unlock(){
-		for (int i = 0; i < nSize; i++){
-			ins[i]->decrease_loc();
-		}
-		if (!lossed)return;
-		for (int i = 0; i < nSize; i++){
-			ins[i]->lossed = true;
-		}
-	}
-
-protected:
-	void forward(const int& dim) {
-		int oDim;
-		dtype sum = 0;
-		for (int idx = 0; idx < nSize; idx++){
-			oDim = ins[idx]->val.dim;
-			if (oDim == 1){
-				sum += ins[idx]->val[0];
-			}
-			else if (dim < oDim){
-				sum += ins[idx]->val[dim];
-			}
-		}
-		for (int idx = 0; idx < nSize; idx++){
-			ins[idx]->increase_loc();
-		}
-		val[0] += sum;
-		dimId = dim;
-	}
-
-};
-
-
-struct SPAddAllDimNode : Node {
-	vector<PNode> ins;
-	int nSize;
-public:
-	SPAddAllDimNode() : Node(){
-		ins.clear();
-		nSize = 0;
-	}
-
-public:
-	virtual inline void clearValue(){
-		Node::clearValue();
-		ins.clear();
-		nSize = 0;
-	}
-
-public:
-	void forward(Graph *cg, const vector<PNode>& x) {
-		nSize = x.size();
-		ins.clear();
-		for (int i = 0; i < nSize; i++){
-			ins.push_back(x[i]);
-		}
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		nSize = 2;
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		nSize = 3;
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		nSize = 4;
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		ins.push_back(x5);
-		nSize = 5;
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, PNode x6){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		ins.push_back(x5);
-		ins.push_back(x6);
-		nSize = 6;
-
-		forward();
-		cg->addNode(this);
-	}
-
-
-	void backward(){
-		for (int i = 0; i < nSize; i++){
-			for (int idy = 0; idy < dim; idy++){
-				ins[i]->loss[idy] += loss[idy];
-			}
-		}
-	}
-
-	inline void unlock(){
-		for (int i = 0; i < nSize; i++){
-			ins[i]->decrease_loc();
-		}
-		if (!lossed)return;
-		for (int i = 0; i < nSize; i++){
-			ins[i]->lossed = true;
-		}
-	}
-
-protected:
-	void forward() {
-		for (int idx = 0; idx < nSize; idx++){
-			for (int idy = 0; idy < dim; idy++){
-				val[idy] += ins[idx]->val[idy];
-			}
-		}
-		for (int idx = 0; idx < nSize; idx++){
-			ins[idx]->increase_loc();
-		}
-	}
-
-};
-
-struct SPAddAllDimScaleNode : Node {
-	vector<PNode> ins;
-	int nSize;
-	dtype scale;
-public:
-	SPAddAllDimScaleNode() : Node(){
-		ins.clear();
-		nSize = 0;
-		scale = 1.0;
-	}
-
-public:
-	inline void setParam(dtype oScale = 1.0) {
-		scale = oScale;
-	}
-	
-public:
-	virtual inline void clearValue(){
-		Node::clearValue();
-		ins.clear();
-		nSize = 0;
-	}
-
-public:
-	// please better restrict col to 1
-	void forward(Graph *cg, const vector<PNode>& x) {
-		nSize = x.size();
-		ins.clear();
-		for (int i = 0; i < nSize; i++){
-			ins.push_back(x[i]);
-		}
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		nSize = 2;
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		nSize = 3;
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		nSize = 4;
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		ins.push_back(x5);
-		nSize = 5;
-
-		forward();
-		cg->addNode(this);
-	}
-
-	void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, PNode x6){
-		ins.clear();
-		ins.push_back(x1);
-		ins.push_back(x2);
-		ins.push_back(x3);
-		ins.push_back(x4);
-		ins.push_back(x5);
-		ins.push_back(x6);
-		nSize = 6;
-
-		forward();
-		cg->addNode(this);
-	}
-
-
-	void backward(){
-		for (int i = 0; i < nSize; i++){
-			for (int idy = 0; idy < dim; idy++){
-				ins[i]->loss[idy] += scale * loss[idy];
-			}
-		}
-	}
-
-	inline void unlock(){
-		for (int i = 0; i < nSize; i++){
-			ins[i]->decrease_loc();
-		}
-		if (!lossed)return;
-		for (int i = 0; i < nSize; i++){
-			ins[i]->lossed = true;
-		}
-	}
-
-protected:
-	void forward() {
-		for (int idx = 0; idx < nSize; idx++){
-			for (int idy = 0; idy < dim; idy++){
-				val[idy] += scale * ins[idx]->val[idy];
-			}
-		}
-		for (int idx = 0; idx < nSize; idx++){
-			ins[idx]->increase_loc();
-		}
-	}
-
-};
 
 #endif /* COPUtil_H_ */

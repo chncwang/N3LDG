@@ -20,8 +20,6 @@ using namespace Eigen;
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
 class Graph {
-public:
-  bool train;
 protected:
   vector<PExecute> execs; //backward
   vector<PNode> nodes; //forward
@@ -30,7 +28,22 @@ protected:
   vector<PNode> all_nodes;
 
 public:
+  bool train;
+
+public:
   Graph() {
+    execs.clear();
+    execs.clear();
+    nodes.clear();
+    free_nodes.clear();
+  }
+
+  virtual ~Graph() {
+    int count = execs.size();
+    for (int idx = 0; idx < count; idx++) {
+      delete execs[idx];
+    }
+    execs.clear();
     execs.clear();
     nodes.clear();
     free_nodes.clear();
@@ -38,19 +51,21 @@ public:
 
 public:
   inline void clearValue(const bool& bTrain = false) {
-    int count = nodes.size();
+    int count = execs.size();
     for (int idx = 0; idx < count; idx++) {
-      nodes.at(idx)->clearValue();
+      delete execs[idx];
+    }
+    execs.clear();
+
+    count = nodes.size();
+    for (int idx = 0; idx < count; idx++) {
+      nodes[idx]->clearValue();
     }
     nodes.clear();
     free_nodes.clear();
     finish_nodes.clear();
     all_nodes.clear();
-    count = execs.size();
-    for (int idx = 0; idx < count; idx++) {
-      delete execs[idx];
-    }
-    execs.clear();
+
     train = bTrain;
   }
 
@@ -74,7 +89,6 @@ public:
     int free_count = free_nodes.size();
 
     while (free_count > 0) {
-
       vector<PExecute> cur_execs;
       int cur_execs_size = 0;
 
@@ -88,7 +102,7 @@ public:
         }
 
         if (!find) {
-          PExecute new_exec = free_nodes[idx]->generate();
+          PExecute new_exec = free_nodes[idx]->generate(train);
           cur_execs.push_back(new_exec);
           cur_execs_size++;
         }
@@ -96,8 +110,12 @@ public:
       }
 
       //execute
+//#pragma omp parallel for
       for (int idy = 0; idy < cur_execs_size; idy++) {
         cur_execs[idy]->forward();
+      }
+
+      for (int idy = 0; idy < cur_execs_size; idy++) {
         execs.push_back(cur_execs[idy]);
       }
 
@@ -120,46 +138,15 @@ public:
       for (int idx = 0; idx < free_count; idx++) {
         free_nodes.push_back(new_free_nodes[idx]);
       }
+
     }
 
     if (finish_nodes.size() != all_nodes.size()) {
-      std::cout << "finish nodes size = " << finish_nodes.size() << " all_nodes size = " << all_nodes.size() << std::endl;
-
-	  std::unordered_set<PNode> node_ptr_set;
-	  for (PNode node : finish_nodes) {
-		  node_ptr_set.insert(node);
-	  }
-
-	  for (PNode node: finish_nodes) {
-		  cout << "finished nodes:" << node->tag << endl;
-	  }
-
-	  for (PNode node : all_nodes) {
-		  if (node_ptr_set.find(node) == node_ptr_set.end()) {
-			  cout << "unfinished node:" << node->tag << endl;
-		  }
-	  }
-
-	  unordered_map<Node *, int> all_node_count_map;
-	  for (Node *node : all_nodes) {
-		  auto result = all_node_count_map.find(node);
-		  if (result == all_node_count_map.end()) {
-			  all_node_count_map[node] = 1;
-		  }
-		  else {
-			  all_node_count_map[node] += 1;
-		  }
-	  }
-
-	  for (auto it : all_node_count_map) {
-		  if (it.second > 1) {
-			  cout << "Graph compute nodetag:" << it.first->tag << " count:"<< it.second << endl;
-		  }
-	  }
-
-	  assert(false);
+      std::cout << finish_nodes.size() << "\t" << all_nodes.size() << std::endl;
+      std::cout << "error" << std::endl;
     }
   }
+
 };
 
 

@@ -7,8 +7,6 @@
 #include "TriOP.h"
 #include "BiOP.h"
 #include "Graph.h"
-#include "AddOP.h"
-#include "TanhOP.h"
 #include <memory>
 
 struct LSTMParams {
@@ -27,25 +25,25 @@ struct LSTMParams {
 };
 
 void LSTMParams::initial(int outDim, int inDim, AlignedMemoryPool *pool) {
-	inputParams.initial(outDim, {inDim, outDim, outDim}, true, pool);
-	forgetParams.initial(outDim, {inDim, outDim, outDim});
-	cellParams.initial(outDim, {inDim, outDim}, true, pool);
-	outputParams.initial(outDim, { inDim, outDim, outDim }, true, pool);
+	inputParams.initial(outDim, inDim, outDim, outDim, true, pool);
+	forgetParams.initial(outDim, inDim, outDim, outDim);
+	cellParams.initial(outDim, inDim, outDim, true, pool);
+	outputParams.initial(outDim, inDim, outDim, outDim , true, pool);
 }
 
 void LSTMParams::exportToAdaParams(ModelUpdate &ada) {
-  inputParams.exportToAdaParams(ada);
-  outputParams.exportToAdaParams(ada);
-  forgetParams.exportToAdaParams(ada);
-  cellParams.exportToAdaParams(ada);
+  inputParams.exportAdaParams(ada);
+  outputParams.exportAdaParams(ada);
+  forgetParams.exportAdaParams(ada);
+  cellParams.exportAdaParams(ada);
 }
 
 int LSTMParams::inDim() {
-  return inputParams.w1().inDim();
+  return inputParams.W1.inDim();
 }
 
 int LSTMParams::outDim() {
-  return inputParams.w3().inDim();
+  return inputParams.W3.inDim();
 }
 
 class NodeBehavior {
@@ -67,7 +65,7 @@ public:
 };
 
 void BucketBehavior::init(int outDim, AlignedMemoryPool *pool) {
-	_bucketNode.init(outDim, pool);
+	_bucketNode.init(outDim, -1, pool);
 }
 
 void BucketBehavior::forward(Graph *graph) {
@@ -84,7 +82,7 @@ class LSTMBuilder {
     ~LSTMBuilder() = default;
 
     void clear();
-    void init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight = true, AlignedMemoryPool *pool = NULL, const string &tagPrefix = "");
+    void init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight = true, AlignedMemoryPool *pool = NULL);
     void resize(int maxSize);
     void forward(Graph *cg, const vector<PNode>& x, int words_num);
 
@@ -113,7 +111,7 @@ LSTMBuilder::LSTMBuilder() : _firstCellNodeBehavior(new BucketBehavior), _firstH
   _params = NULL;
 }
 
-void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight, AlignedMemoryPool *pool, const string &tagPrefix) {
+void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftToRight, AlignedMemoryPool *pool) {
   _params = params;
   int upperLimitSize = _inputFilters.size();
 
@@ -124,20 +122,20 @@ void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftTo
 	  _outputGates.at(i).tag = "lstm output " + std::to_string(i);
 	  _halfCells.at(i).tag = "lstm half cells " + std::to_string(i);
 	  _cells.at(i).tag = "lstm cells " + std::to_string(i);
-	  _hiddens.at(i).tag = tagPrefix + " lstm hidden " + std::to_string(i);
+	  _hiddens.at(i).tag = " lstm hidden " + std::to_string(i);
 	  _halfHiddens.at(i).tag = "lstm half hidden" + std::to_string(i);
 	  _forgetFilters.at(i).tag = "lstm forget filter " + std::to_string(i);
-	  _inputGates.at(i).setActivationAndDerivation(fsigmoid, dsigmoid);
-	  _forgetGates.at(i).setActivationAndDerivation(fsigmoid, dsigmoid);
-	  _outputGates.at(i).setActivationAndDerivation(fsigmoid, dsigmoid);
-	  _halfCells.at(i).setActivationAndDerivation(ftanh, dtanh);
+	  _inputGates.at(i).setFunctions(fsigmoid, dsigmoid);
+	  _forgetGates.at(i).setFunctions(fsigmoid, dsigmoid);
+	  _outputGates.at(i).setFunctions(fsigmoid, dsigmoid);
+	  _halfCells.at(i).setFunctions(ftanh, dtanh);
   }
 
   for (int i = 0; i < upperLimitSize; ++i) {
-    _inputGates.at(i).setParams(&_params->inputParams);
-    _forgetGates.at(i).setParams(&_params->forgetParams);
-    _outputGates.at(i).setParams(&_params->outputParams);
-    _halfCells.at(i).setParams(&_params->cellParams);
+    _inputGates.at(i).setParam(&_params->inputParams);
+    _forgetGates.at(i).setParam(&_params->forgetParams);
+    _outputGates.at(i).setParam(&_params->outputParams);
+    _halfCells.at(i).setParam(&_params->cellParams);
   }
 
   _shouldLeftToRight = shouldLeftToRight;
@@ -145,15 +143,15 @@ void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftTo
   int outDim = _params->outDim();
 
   for (int i = 0; i < upperLimitSize; ++i) {
-    _inputGates.at(i).init(outDim, pool);
-    _forgetGates.at(i).init(outDim,  pool);
-    _halfCells.at(i).init(outDim,  pool);
-    _inputFilters.at(i).init(outDim,  pool);
-  _forgetFilters.at(i).init(outDim,  pool);
-    _cells.at(i).init(outDim, pool);
-    _outputGates.at(i).init(outDim,  pool);
-    _halfHiddens.at(i).init(outDim,  pool);
-    _hiddens.at(i).init(outDim, pool);
+    _inputGates.at(i).init(outDim, dropoutRatio ,pool);
+    _forgetGates.at(i).init(outDim, dropoutRatio, pool);
+    _halfCells.at(i).init(outDim, dropoutRatio ,pool);
+    _inputFilters.at(i).init(outDim,  -1,pool);
+  _forgetFilters.at(i).init(outDim,  -1,pool);
+    _cells.at(i).init(outDim, -1,pool);
+    _outputGates.at(i).init(outDim,  dropoutRatio,pool);
+    _halfHiddens.at(i).init(outDim, -1, pool);
+    _hiddens.at(i).init(outDim, -1,pool);
   }
 
   _firstHiddenNodeBehavior->init(outDim, pool);
@@ -193,24 +191,24 @@ void LSTMBuilder::forward(Graph *cg, const vector<PNode>& x, int words_num) {
 void LSTMBuilder::forwardFromLeftToRight(Graph *graph,
     const vector<PNode> &x, int words_num) {
 
-  _inputGates.at(0).forward(graph, {x.at(0) , &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode()});
-  _forgetGates.at(0).forward(graph, { x.at(0), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode() });
-  _halfCells.at(0).forward(graph, {x.at(0), &_firstHiddenNodeBehavior->getNode()});
+  _inputGates.at(0).forward(graph, x.at(0) , &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode());
+  _forgetGates.at(0).forward(graph,  x.at(0), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode() );
+  _halfCells.at(0).forward(graph, x.at(0), &_firstHiddenNodeBehavior->getNode());
   _inputFilters.at(0).forward(graph, &_inputGates.at(0), &_halfCells.at(0));
   _forgetFilters.at(0).forward(graph, &_firstCellNodeBehavior->getNode(), &_forgetGates.at(0));
-  _cells.at(0).forward(graph, { &_forgetFilters.at(0) , &_inputFilters.at(0) });
-  _outputGates.at(0).forward(graph, {x.at(0), &_firstHiddenNodeBehavior->getNode(), &_cells.at(0)});
+  _cells.at(0).forward(graph,  &_forgetFilters.at(0) , &_inputFilters.at(0) );
+  _outputGates.at(0).forward(graph, x.at(0), &_firstHiddenNodeBehavior->getNode(), &_cells.at(0));
   _halfHiddens.at(0).forward(graph, &_cells.at(0));
   _hiddens.at(0).forward(graph, &_halfHiddens.at(0), &_outputGates.at(0));
 
   for (int i=1; i< words_num; ++i) {
-    _inputGates[i].forward(graph, {x.at(i), &_hiddens.at(i - 1), &_cells.at(i - 1)});
-    _forgetGates[i].forward(graph, {x.at(i), &_hiddens.at(i - 1), &_cells.at(i -1)});
-    _halfCells[i].forward(graph, {x[i], &_hiddens.at(i - 1)});
+    _inputGates[i].forward(graph, x.at(i), &_hiddens.at(i - 1), &_cells.at(i - 1));
+    _forgetGates[i].forward(graph, x.at(i), &_hiddens.at(i - 1), &_cells.at(i -1));
+    _halfCells[i].forward(graph, x[i], &_hiddens.at(i - 1));
     _inputFilters[i].forward(graph, &_halfCells[i], &_inputGates[i]);
     _forgetFilters[i].forward(graph, &_cells[i - 1], &_forgetGates[i]);
-    _cells[i].forward(graph, {&_inputFilters[i], &_forgetFilters[i]});
-	_outputGates[i].forward(graph, {x.at(i), &_hiddens[i - 1], &_cells[i] });
+    _cells[i].forward(graph, &_inputFilters[i], &_forgetFilters[i]);
+	_outputGates[i].forward(graph, x.at(i), &_hiddens[i - 1], &_cells[i]);
     _halfHiddens[i].forward(graph, &_cells[i]);
     _hiddens[i].forward(graph, &_halfHiddens[i], &_outputGates[i]);
   }
@@ -219,24 +217,24 @@ void LSTMBuilder::forwardFromLeftToRight(Graph *graph,
 void LSTMBuilder::forwardFromRightToLeft(Graph *graph,
     const vector<PNode> &x, int words_num) {
 	int firstIndex = words_num - 1;
-	_inputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode()});
-	_forgetGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode()});
-	_halfCells.at(firstIndex).forward(graph, { x.at(firstIndex), &_firstHiddenNodeBehavior->getNode() });
+	_inputGates.at(firstIndex).forward(graph, x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode());
+	_forgetGates.at(firstIndex).forward(graph, x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode());
+	_halfCells.at(firstIndex).forward(graph, x.at(firstIndex), &_firstHiddenNodeBehavior->getNode());
 	_inputFilters.at(firstIndex).forward(graph, &_inputGates.at(firstIndex), &_halfCells.at(firstIndex));
 	_forgetFilters.at(firstIndex).forward(graph, &_firstCellNodeBehavior->getNode(), &_forgetGates.at(firstIndex));
-	_cells.at(firstIndex).forward(graph, {&_forgetFilters.at(firstIndex), &_inputFilters.at(firstIndex)});
-	_outputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_cells.at(firstIndex)});
+	_cells.at(firstIndex).forward(graph, &_forgetFilters.at(firstIndex), &_inputFilters.at(firstIndex));
+	_outputGates.at(firstIndex).forward(graph, x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_cells.at(firstIndex));
 	_halfHiddens.at(firstIndex).forward(graph, &_cells.at(firstIndex));
 	_hiddens.at(firstIndex).forward(graph, &_halfHiddens.at(firstIndex), &_outputGates.at(firstIndex));
 
 	for (int i = firstIndex - 1; i >= 0; --i) {
-		_inputGates[i].forward(graph, { x.at(i), &_hiddens.at(i + 1), &_cells.at(i + 1) });
-		_forgetGates[i].forward(graph, { x.at(i), &_hiddens.at(i + 1), &_cells.at(i + 1) });
-		_halfCells[i].forward(graph, { x[i], &_hiddens.at(i + 1) });
+		_inputGates[i].forward(graph, x.at(i), &_hiddens.at(i + 1), &_cells.at(i + 1));
+		_forgetGates[i].forward(graph, x.at(i), &_hiddens.at(i + 1), &_cells.at(i + 1));
+		_halfCells[i].forward(graph, x[i], &_hiddens.at(i + 1));
 		_inputFilters[i].forward(graph, &_halfCells[i], &_inputGates[i]);
 		_forgetFilters[i].forward(graph, &_cells[i + 1], &_forgetGates[i]);
-		_cells[i].forward(graph, { &_inputFilters[i], &_forgetFilters[i] });
-		_outputGates[i].forward(graph, { x.at(i), &_hiddens[i + 1], &_cells[i] });
+		_cells[i].forward(graph, &_inputFilters[i], &_forgetFilters[i]);
+		_outputGates[i].forward(graph, x.at(i), &_hiddens[i + 1], &_cells[i]);
 		_halfHiddens[i].forward(graph, &_cells[i]);
 		_hiddens[i].forward(graph, &_halfHiddens[i], &_outputGates[i]);
 	}

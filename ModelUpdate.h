@@ -15,7 +15,7 @@
 class ModelUpdate {
 
 public:
-  vector<BaseParam *> _params;
+  vector<BaseParam*> _params;
 
   dtype _reg, _alpha, _eps;
   dtype _belta1, _belta2;
@@ -35,11 +35,11 @@ public:
 
 public:
 
-  inline void addParam(BaseParam *param) {
+  inline void addParam(BaseParam* param) {
     _params.push_back(param);
   }
 
-  inline void addParam(const vector<BaseParam *> &params) {
+  inline void addParam(const vector<BaseParam*>& params) {
     for (int idx = 0; idx < params.size(); idx++) {
       _params.push_back(params[idx]);
     }
@@ -136,6 +136,7 @@ public:
 
 
 };
+
 
 
 #endif /* ModelUpdate_H_ */
