@@ -146,12 +146,12 @@ void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftTo
     _inputGates.at(i).init(outDim, dropoutRatio ,pool);
     _forgetGates.at(i).init(outDim, dropoutRatio, pool);
     _halfCells.at(i).init(outDim, dropoutRatio ,pool);
-    _inputFilters.at(i).init(outDim,  -1,pool);
-  _forgetFilters.at(i).init(outDim,  -1,pool);
-    _cells.at(i).init(outDim, -1,pool);
+    _inputFilters.at(i).init(outDim,  dropoutRatio,pool);
+  _forgetFilters.at(i).init(outDim,  dropoutRatio,pool);
+    _cells.at(i).init(outDim, dropoutRatio,pool);
     _outputGates.at(i).init(outDim,  dropoutRatio,pool);
-    _halfHiddens.at(i).init(outDim, -1, pool);
-    _hiddens.at(i).init(outDim, -1,pool);
+    _halfHiddens.at(i).init(outDim, dropoutRatio, pool);
+    _hiddens.at(i).init(outDim, dropoutRatio,pool);
   }
 
   _firstHiddenNodeBehavior->init(outDim, pool);
