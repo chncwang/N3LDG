@@ -48,14 +48,14 @@ int LSTMParams::outDim() {
   return inputParams.w3().inDim();
 }
 
-class FirstCellNodeBehavior {
+class NodeBehavior {
 public:
 	virtual void init(int outDim, AlignedMemoryPool *pool = NULL) = 0;
 	virtual void forward(Graph *graph) = 0;
 	virtual Node& getNode() = 0;
 };
 
-class BucketBehavior : public FirstCellNodeBehavior {
+class BucketBehavior : public NodeBehavior {
 public:
 	BucketBehavior() = default;
 	void init(int outDim, AlignedMemoryPool *pool = NULL) override;
@@ -101,14 +101,14 @@ class LSTMBuilder {
     vector<TriNode> _outputGates;
     vector<TanhNode> _halfHiddens;
     vector<PMultiNode> _hiddens;
-    BucketNode _bucketHiddenNode;
-	std::shared_ptr<FirstCellNodeBehavior> _firstCellNodeBehavior;
+	std::shared_ptr<NodeBehavior> _firstCellNodeBehavior;
+	std::shared_ptr<NodeBehavior> _firstHiddenNodeBehavior;
     LSTMParams *_params;
 
     bool _shouldLeftToRight;
 };
 
-LSTMBuilder::LSTMBuilder() : _firstCellNodeBehavior(new BucketBehavior) {
+LSTMBuilder::LSTMBuilder() : _firstCellNodeBehavior(new BucketBehavior), _firstHiddenNodeBehavior(new BucketBehavior) {
   _shouldLeftToRight = true;
   _params = NULL;
 }
@@ -118,7 +118,6 @@ void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftTo
   int upperLimitSize = _inputFilters.size();
 
   for (int i = 0; i < upperLimitSize; ++i) {
-
 	  _inputGates.at(i).tag = "lstm input " + std::to_string(i);
 	  _inputFilters.at(i).tag = "lstm input filter " + std::to_string(i);
 	  _forgetGates.at(i).tag = "lstm forget " + std::to_string(i);
@@ -157,7 +156,7 @@ void LSTMBuilder::init(LSTMParams *params, dtype dropoutRatio, bool shouldLeftTo
     _hiddens.at(i).init(outDim, pool);
   }
 
-  _bucketHiddenNode.init(outDim, pool);
+  _firstHiddenNodeBehavior->init(outDim, pool);
   _firstCellNodeBehavior->init(outDim, pool);
 }
 
@@ -183,7 +182,7 @@ void LSTMBuilder::forward(Graph *cg, const vector<PNode>& x, int words_num) {
 		assert(false);
 	}
   _firstCellNodeBehavior->forward(cg);
-  _bucketHiddenNode.forward(cg, 0);
+  _firstHiddenNodeBehavior->forward(cg);
   if (_shouldLeftToRight) {
     forwardFromLeftToRight(cg, x, words_num);
   } else {
@@ -194,11 +193,13 @@ void LSTMBuilder::forward(Graph *cg, const vector<PNode>& x, int words_num) {
 void LSTMBuilder::forwardFromLeftToRight(Graph *graph,
     const vector<PNode> &x, int words_num) {
 
-  _inputGates.at(0).forward(graph, {x.at(0) , &_bucketHiddenNode, &_firstCellNodeBehavior->getNode()});
-  _halfCells.at(0).forward(graph, {x.at(0), &_bucketHiddenNode});
+  _inputGates.at(0).forward(graph, {x.at(0) , &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode()});
+  _forgetGates.at(0).forward(graph, { x.at(0), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode() });
+  _halfCells.at(0).forward(graph, {x.at(0), &_firstHiddenNodeBehavior->getNode()});
   _inputFilters.at(0).forward(graph, &_inputGates.at(0), &_halfCells.at(0));
+  _forgetFilters.at(0).forward(graph, &_firstCellNodeBehavior->getNode(), &_forgetGates.at(0));
   _cells.at(0).forward(graph, { &_firstCellNodeBehavior->getNode() , &_inputFilters.at(0) });
-  _outputGates.at(0).forward(graph, {x.at(0), &_bucketHiddenNode, &_cells.at(0)});
+  _outputGates.at(0).forward(graph, {x.at(0), &_firstHiddenNodeBehavior->getNode(), &_cells.at(0)});
   _halfHiddens.at(0).forward(graph, &_cells.at(0));
   _hiddens.at(0).forward(graph, &_halfHiddens.at(0), &_outputGates.at(0));
 
@@ -218,11 +219,13 @@ void LSTMBuilder::forwardFromLeftToRight(Graph *graph,
 void LSTMBuilder::forwardFromRightToLeft(Graph *graph,
     const vector<PNode> &x, int words_num) {
 	int firstIndex = words_num - 1;
-	_inputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_bucketHiddenNode, &_firstCellNodeBehavior->getNode()});
-	_halfCells.at(firstIndex).forward(graph, { x.at(firstIndex), &_bucketHiddenNode });
+	_inputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode()});
+	_forgetGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_firstCellNodeBehavior->getNode()});
+	_halfCells.at(firstIndex).forward(graph, { x.at(firstIndex), &_firstHiddenNodeBehavior->getNode() });
 	_inputFilters.at(firstIndex).forward(graph, &_inputGates.at(firstIndex), &_halfCells.at(firstIndex));
-	_cells.at(firstIndex).forward(graph, {&_firstCellNodeBehavior->getNode(), &_inputFilters.at(firstIndex)});
-	_outputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_bucketHiddenNode, &_cells.at(firstIndex)});
+	_forgetFilters.at(firstIndex).forward(graph, &_firstCellNodeBehavior->getNode(), &_forgetGates.at(firstIndex));
+	_cells.at(firstIndex).forward(graph, {&_forgetFilters.at(firstIndex), &_inputFilters.at(firstIndex)});
+	_outputGates.at(firstIndex).forward(graph, {x.at(firstIndex), &_firstHiddenNodeBehavior->getNode(), &_cells.at(firstIndex)});
 	_halfHiddens.at(firstIndex).forward(graph, &_cells.at(firstIndex));
 	_hiddens.at(firstIndex).forward(graph, &_halfHiddens.at(firstIndex), &_outputGates.at(firstIndex));
 
