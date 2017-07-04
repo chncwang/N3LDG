@@ -767,5 +767,15 @@ inline int cmpStringIntPairByValue(const pair<string, int> &x, const pair<string
   return x.second > y.second;
 }
 
+// for lowercase English only
+bool isPunctuation(const std::string &text) {
+	for (char c : text) {
+		if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+			return false;
+		}
+	}
+	return true;
+}
+
 #endif
 
