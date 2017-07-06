@@ -66,7 +66,7 @@ public:
   inline bool initialWeights(const string& inFile, bool tune, bool normalize = true) {
     if (nVSize == 0 || !elems->is_fixed()) {
       std::cout << "please check the alphabet" << std::endl;
-      return false;
+	  abort();
     }
 
     ifstream inf;
