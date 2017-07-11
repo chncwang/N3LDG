@@ -777,5 +777,10 @@ bool isPunctuation(const std::string &text) {
 	return true;
 }
 
+bool isEqual(float a, float b) {
+	float c = a - b;
+	return c < 0.001 && c > -0.001;
+}
+
 #endif
 
