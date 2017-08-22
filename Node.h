@@ -104,6 +104,8 @@ class Node {
     }
 
   public:
+    virtual void compute() {}
+    virtual void backword() {}
 
     virtual inline Execute* generate(bool bTrain) = 0;
 

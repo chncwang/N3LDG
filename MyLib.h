@@ -772,5 +772,12 @@ bool isEqual(float a, float b) {
 	return c < 0.001 && c > -0.001;
 }
 
+void n3ldg_assert(bool assertion, const std::string &message) {
+  if (!assertion) {
+    std::cerr << message << endl;
+    abort(); // abort is recommended when a programming error happens.
+  }
+}
+
 #endif
 
