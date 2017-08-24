@@ -18,7 +18,8 @@
 #include <unordered_set>
 
 #include "NRMat.h"
-#include "Eigen/Dense"
+#include <Eigen/Dense>
+#include <unsupported/Eigen/CXX11/Tensor>
 
 using namespace nr;
 using namespace std;
@@ -26,7 +27,7 @@ using namespace Eigen;
 
 #if USE_FLOAT
 typedef float dtype;
-typedef Eigen::TensorMap<Eigen::Tensor<float, 1>>  Vec;
+typedef Eigen::TensorMap<Eigen::Tensor<float, 1> >  Vec;
 typedef Eigen::Map<MatrixXf> Mat;
 #else
 typedef double dtype;
@@ -753,6 +754,16 @@ inline void addAllItems(vector<A>& target, const vector<A>& sources) {
 }
 
 
+template <typename T, typename S>
+std::vector<S *> toPointers(std::vector<T> &v) {
+    std::vector<S *> pointers;
+    for (T &a : v) {
+        pointers.push_back(&a);
+    }
+    return pointers;
+}
+
+
 inline int cmpStringIntPairByValue(const pair<string, int> &x, const pair<string, int> &y) {
     return x.second > y.second;
 }
@@ -772,12 +783,11 @@ bool isEqual(float a, float b) {
 	return c < 0.001 && c > -0.001;
 }
 
-void n3ldg_assert(bool assertion, const std::string &message) {
-  if (!assertion) {
-    std::cerr << message << endl;
-    abort(); // abort is recommended when a programming error happens.
+#define n3ldg_assert(assertion, message) \
+  if (!(assertion)) {\
+    std::cerr << message << endl;\
+    abort(); \
   }
-}
 
 #endif
 

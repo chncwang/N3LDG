@@ -15,28 +15,40 @@
 
 #include "MyTensor.h"
 
+#include <array>
+#include <string>
+
+enum NodeType {
+    SCALAR_MULTIPLY = 0,
+    ACTIVATED = 1
+};
+
+const std::string &toString(NodeType node_type) {
+    static std::array<std::string, 2> node_type_strings = { "scalar_multiply", "activated" };
+    return node_type_strings.at(node_type);
+}
 
 class Execute;
 
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
 class Node {
-  public:
+public:
     vector<Node*> parents;
-  public:
+public:
     Tensor1D val;
     Tensor1D loss;
-  public:
+public:
     int dim;
     int degree;
     string node_type;
 
-  public:
+public:
     Tensor1D drop_mask;
     dtype drop_value;
 
 
-  public:
+public:
     Node() {
         dim = 0;
         degree = 0;
@@ -54,7 +66,7 @@ class Node {
     }
 
 
-  public:
+public:
     virtual inline void clearValue() {
         val = 0;
         loss = 0;
@@ -64,6 +76,7 @@ class Node {
     }
 
     virtual inline void init(int ndim, dtype dropout) {
+        n3ldg_assert(ndim > 0, "dim should be a positive integer but is " << ndim);
         dim = ndim;
         val.init(dim);
         loss.init(dim);
@@ -103,9 +116,9 @@ class Node {
         }
     }
 
-  public:
+public:
     virtual void compute() {}
-    virtual void backword() {}
+    virtual void backward() {}
 
     virtual inline Execute* generate(bool bTrain) = 0;
 
@@ -116,7 +129,7 @@ class Node {
         return false;
     }
 
-  public:
+public:
     virtual inline void addParent(Node* parent) {
         if (degree >= 0) {
             parents.push_back(parent);
@@ -131,17 +144,17 @@ typedef  Node* PNode;
 
 
 class Execute {
-  public:
+public:
     vector<PNode> batch;
 
-  public:
+public:
     virtual ~Execute() {
         batch.clear();
     }
 
-  public:
-    virtual inline void forward() = 0;
-    virtual inline void backward() = 0;
+public:
+    virtual void forward() = 0;
+    virtual void backward() = 0;
 
 
     virtual inline bool addNode(PNode in) {
@@ -159,6 +172,43 @@ class Execute {
     }
 };
 
+class DropoutableExecute : public Execute {
+public:
+    void init(PNode pnode, bool btrain) {
+        batch.push_back(pnode);
+        bTrain = btrain;
+    }
+
+    void forward() override {
+        int count = batch.size();
+        for (int idx = 0; idx < count; idx++) {
+            Node* ptr = batch[idx];
+            ptr->compute();
+            ptr->forward_drop(bTrain);
+        }
+    }
+
+    void backward() override {
+        int count = batch.size();
+        for (int idx = 0; idx < count; idx++) {
+            Node* ptr = batch[idx];
+            ptr->backward_drop();
+            ptr->backward();
+        }
+    }
+
+private:
+    bool bTrain;
+};
+
+class DropoutableNode :public Node {
+public:
+    Execute* generate(bool bTrain) override {
+        n3ldg_assert(drop_value > 0 && drop_value < 1, "dropout is invalid");
+        DropoutableExecute * execute = new DropoutableExecute();
+        execute->init(this, bTrain);
+    }
+};
 
 typedef  Execute* PExecute;
 
