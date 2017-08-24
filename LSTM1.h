@@ -14,6 +14,9 @@
 #include "BiOP.h"
 #include "AtomicOP.h"
 #include "Graph.h"
+#include "PMultiOP.h"
+#include "PAddOP.h"
+#include "BucketOP.h"
 
 struct LSTM1Params {
     BiParams input;
@@ -175,7 +178,7 @@ class LSTM1Builder {
         }
         _nSize = x.size();
         if (x[0]->val.dim != _inDim) {
-            std::cout << "input dim does not match for seg operation" << std::endl;
+            std::cout << "input dim does not match for lstm operation" << std::endl;
             return;
         }
 

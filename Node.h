@@ -89,7 +89,6 @@ public:
         parents.clear();
     }
 
-
     inline void forward_drop(bool bTrain) {
         if (drop_value > 0) {
             if (bTrain) {

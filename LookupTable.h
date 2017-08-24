@@ -132,9 +132,15 @@ class LookupTable {
             }
         }
 
+        if (count == 0) {
+            E.val.random(sqrt(3.0 / nDim));
+            std::cout << "find no overlapped lexicons in the embedding file" << std::endl;
+            return false;
+        }
+
         if (nUNKId >= 0 && !bHasUnknown) {
             for (int idx = 0; idx < nDim; idx++) {
-                E.val[nUNKId][idx] = sum[idx] / count;
+                E.val[nUNKId][idx] = sum[idx] / (count + 1);
             }
             indexers.insert(nUNKId);
             count++;
@@ -222,9 +228,9 @@ class LookupNode : public Node {
         if (xid < 0 && param->nUNKId >= 0) {
             xid = param->nUNKId;
         }
-		if (param->bFineTune && xid < 0) {
-			std::cout << "Caution: unknown words are not modeled !" << std::endl;
-		}
+        if (param->bFineTune && xid < 0) {
+            std::cout << "Caution: unknown words are not modeled !" << std::endl;
+        }
         degree = 0;
         cg->addNode(this);
     }
@@ -250,7 +256,7 @@ class LookupNode : public Node {
     void compute() {
         if (xid >= 0) {
             param->E.value(xid, val);
-        } else {            
+        } else {
             val.zero();
         }
     }

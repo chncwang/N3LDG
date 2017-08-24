@@ -142,17 +142,17 @@ class Graph {
         }
 
         if (finish_nodes.size() != all_nodes.size()) {
-			std::cout << "error: several nodes are not executed, finished: " << finish_nodes.size() << ", all: " << all_nodes.size() << std::endl;
-			int total_node_num = all_nodes.size();
-			int unprocessed = 0;
-			for (int idx = 0; idx < total_node_num; idx++) {
-				PNode curNode = all_nodes[idx];
-				if (curNode->degree >= 0) {
-					curNode->typeEqual(all_nodes[0]);
-					unprocessed++;
-				}
-			}
-			std::cout << "unprocessed: " << unprocessed << std::endl;
+            std::cout << "error: several nodes are not executed, finished: " << finish_nodes.size() << ", all: " << all_nodes.size() << std::endl;
+            int total_node_num = all_nodes.size();
+            int unprocessed = 0;
+            for (int idx = 0; idx < total_node_num; idx++) {
+                PNode curNode = all_nodes[idx];
+                if (curNode->degree >= 0) {
+                    curNode->typeEqual(all_nodes[0]);
+                    unprocessed++;
+                }
+            }
+            std::cout << "unprocessed: " << unprocessed << std::endl;
         }
     }
 
