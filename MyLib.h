@@ -755,12 +755,18 @@ inline void addAllItems(vector<A>& target, const vector<A>& sources) {
 
 
 template <typename T, typename S>
-std::vector<S *> toPointers(std::vector<T> &v) {
+std::vector<S *> toPointers(std::vector<T> &v, int size) {
     std::vector<S *> pointers;
-    for (T &a : v) {
-        pointers.push_back(&a);
+    for (int i = 0; i < size; ++i) {
+        pointers.push_back(&v.at(i));
     }
     return pointers;
+}
+
+
+template <typename T, typename S>
+std::vector<S *> toPointers(std::vector<T> &v) {
+    return toPointers(v, v.size());
 }
 
 
