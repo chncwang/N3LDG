@@ -28,8 +28,8 @@ class ConcatNode : public Node {
 
     inline void clearValue() {
         Node::clearValue();
-		inDims.clear();
-		ins.clear();
+        inDims.clear();
+        ins.clear();
     }
 
   public:
