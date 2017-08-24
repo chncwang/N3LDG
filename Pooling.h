@@ -57,7 +57,7 @@ class PoolNode : public Node {
         ins.clear();
         for (int i = 0; i < nSize; i++) {
             if (x[i]->val.dim != dim) {
-                std::cout << "input matrixes are not matched" << std::endl;
+                std::cout << "Pooling - forward - input matrixes are not matched" << std::endl;
                 clearValue();
                 return;
             }
