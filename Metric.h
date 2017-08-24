@@ -55,6 +55,9 @@ struct Metric {
         }
     }
 
+    float getFMeasure() {
+        return correct_label_count*2.0 / (overall_label_count + predicated_label_count);
+    }
 
     void print() {
         if (predicated_label_count == 0) {

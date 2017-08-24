@@ -766,7 +766,7 @@ std::vector<S *> toPointers(std::vector<T> &v, int size) {
 
 template <typename T, typename S>
 std::vector<S *> toPointers(std::vector<T> &v) {
-    return toPointers(v, v.size());
+    return toPointers<T, S>(v, v.size());
 }
 
 
