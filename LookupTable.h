@@ -230,6 +230,7 @@ class LookupNode : public Node {
         }
         if (param->bFineTune && xid < 0) {
             std::cout << "Caution: unknown words are not modeled !" << std::endl;
+            abort();
         }
         degree = 0;
         cg->addNode(this);
