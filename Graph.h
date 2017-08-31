@@ -10,6 +10,7 @@
 */
 
 
+#include <unordered_set>
 #include "Eigen/Dense"
 #include "Node.h"
 #include "MyLib.h"
@@ -143,6 +144,18 @@ class Graph {
 
         if (finish_nodes.size() != all_nodes.size()) {
             std::cout << "error: several nodes are not executed, finished: " << finish_nodes.size() << ", all: " << all_nodes.size() << std::endl;
+            std::unordered_set<void *> finished_node_ptrs;
+
+            for (auto  x : finish_nodes) {
+                finished_node_ptrs.insert(x);
+            }
+
+            for (auto x : all_nodes) {
+                if (finished_node_ptrs.find(x) == finished_node_ptrs.end()) {
+                    std::cout << x->node_type << std::endl;
+                }
+            }
+
             int total_node_num = all_nodes.size();
             int unprocessed = 0;
             for (int idx = 0; idx < total_node_num; idx++) {
