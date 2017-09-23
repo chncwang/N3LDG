@@ -1297,4 +1297,52 @@ inline PExecute PDotNode::generate(bool bTrain) {
     return exec;
 }
 
+class GrlNode : public Node {
+public:
+    PNode in = NULL;
+
+    GrlNode() {
+        node_type = "grl";
+    }
+
+    void forward(Graph *graph, PNode x) {
+        in = x;
+        degree = 0;
+        in->addParent(this);
+        graph->addNode(this);
+    }
+
+    void compute() {
+        val.vec() = in->val.vec();
+    }
+
+    void backward() {
+        in->loss.vec() = -loss.vec();
+    }
+
+    PExecute generate(bool bTrain) override;
+};
+
+class GrlExecute : public Execute {
+public:
+    void forward() override {
+        for (Node *node : batch) {
+            GrlNode *grl_node = static_cast<GrlNode *>(node);
+            grl_node->compute();
+        }
+    }
+
+    void backward() override {
+        for (Node *node : batch) {
+            GrlNode *grl_node = static_cast<GrlNode *>(node);
+            grl_node->backward();
+        }
+    }
+};
+
+
+PExecute GrlNode::generate(bool bTrain) {
+    return new GrlExecute();
+}
+
 #endif
