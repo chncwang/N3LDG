@@ -1342,7 +1342,9 @@ public:
 
 
 PExecute GrlNode::generate(bool bTrain) {
-    return new GrlExecute();
+    GrlExecute* execute = new GrlExecute();
+    execute->batch.push_back(this);
+    return execute;
 }
 
 #endif
