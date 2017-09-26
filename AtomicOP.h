@@ -1300,9 +1300,14 @@ inline PExecute PDotNode::generate(bool bTrain) {
 class GrlNode : public Node {
 public:
     PNode in = NULL;
+    float ratio = 1.0;
 
     GrlNode() {
         node_type = "grl";
+    }
+
+    void init(float r) {
+        ratio = r;
     }
 
     void forward(Graph *graph, PNode x) {
@@ -1317,7 +1322,7 @@ public:
     }
 
     void backward() {
-        in->loss.vec() = -loss.vec();
+        in->loss.vec() = -loss.vec() * ratio;
     }
 
     PExecute generate(bool bTrain) override;
