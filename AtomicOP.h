@@ -1306,10 +1306,6 @@ public:
         node_type = "grl";
     }
 
-    void init(float r) {
-        ratio = r;
-    }
-
     void forward(Graph *graph, PNode x) {
         in = x;
         degree = 0;
