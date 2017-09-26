@@ -1318,7 +1318,7 @@ public:
     }
 
     void backward() {
-        in->loss.vec() = -loss.vec() * ratio;
+        in->loss.vec() = loss.vec() * ratio;
     }
 
     PExecute generate(bool bTrain) override;
