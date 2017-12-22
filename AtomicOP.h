@@ -81,129 +81,6 @@ class ActivateNode :public Node {
     }
 };
 
-#if USE_GPU
-class ActivateExecute :public Execute {
-  public:
-    Tensor1D x, y;
-    dtype(*activate)(const dtype&);   // activation function
-    dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
-    int sumDim;
-    bool bTrain;
-
-  public:
-    ~ActivateExecute() {
-        sumDim = 0;
-        activate = NULL;
-        derivate = NULL;
-    }
-
-  public:
-    inline void  forward() {
-        int count = batch.size();
-
-        sumDim = 0;
-        for (int idx = 0; idx < count; idx++) {
-            sumDim += batch[idx]->dim;
-        }
-
-        x.init(sumDim, NULL);
-        y.init(sumDim, NULL);
-
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                x[offset + idy] = ptr->in->val[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        y.vec() = x.vec().unaryExpr(ptr_fun(activate));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->val[idy] = y[offset + idy];
-            }
-            offset += ptr->dim;
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        Tensor1D lx, ly;
-        lx.init(sumDim, NULL);
-        ly.init(sumDim, NULL);
-
-        int count = batch.size();
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ly[offset + idy] = ptr->loss[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        lx.vec() = ly.vec() * x.vec().binaryExpr(y.vec(), ptr_fun(derivate));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->in->loss[idy] += lx[offset + idy];
-            }
-            offset += ptr->dim;
-        }
-    }
-};
-
-inline PExecute ActivateNode::generate(bool bTrain) {
-    ActivateExecute* exec = new ActivateExecute();
-    exec->batch.push_back(this);
-    exec->activate = activate;
-    exec->derivate = derivate;
-    exec->bTrain = bTrain;
-    return exec;
-};
-
-#elif USE_BASE
-class ActivateExecute :public Execute {
-  public:
-    bool bTrain;
-  public:
-    inline void  forward() {
-        int count = batch.size();
-//#pragma omp parallel for schedule(static,1)
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-//#pragma omp parallel for schedule(static,1)
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
-        }
-    }
-};
-
-inline PExecute ActivateNode::generate(bool bTrain) {
-    ActivateExecute* exec = new ActivateExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-};
-
-#else
 class ActivateExecute :public Execute {
   public:
     Tensor1D x, y;
@@ -290,11 +167,6 @@ inline PExecute ActivateNode::generate(bool bTrain) {
     exec->bTrain = bTrain;
     return exec;
 };
-#endif
-
-
-
-
 
 class TanhNode :public Node {
   public:
@@ -342,123 +214,6 @@ class TanhNode :public Node {
     }
 };
 
-#if USE_GPU
-class TanhExecute :public Execute {
-  public:
-    Tensor1D x, y;
-    int sumDim;
-    bool bTrain;
-
-  public:
-    ~TanhExecute() {
-        sumDim = 0;
-    }
-
-  public:
-    inline void  forward() {
-        int count = batch.size();
-
-        sumDim = 0;
-        for (int idx = 0; idx < count; idx++) {
-            sumDim += batch[idx]->dim;
-        }
-
-        x.init(sumDim, NULL);
-        y.init(sumDim, NULL);
-
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            TanhNode* ptr = (TanhNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                x[offset + idy] = ptr->in->val[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        y.vec() = x.vec().unaryExpr(ptr_fun(ftanh));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            TanhNode* ptr = (TanhNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->val[idy] = y[offset + idy];
-            }
-            offset += ptr->dim;
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        Tensor1D lx, ly;
-        lx.init(sumDim, NULL);
-        ly.init(sumDim, NULL);
-
-        int count = batch.size();
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            TanhNode* ptr = (TanhNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ly[offset + idy] = ptr->loss[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        lx.vec() = ly.vec() * x.vec().binaryExpr(y.vec(), ptr_fun(dtanh));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            TanhNode* ptr = (TanhNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->in->loss[idy] += lx[offset + idy];
-            }
-            offset += ptr->dim;
-        }
-    }
-};
-
-inline PExecute TanhNode::generate(bool bTrain) {
-    TanhExecute* exec = new TanhExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-};
-
-#elif USE_BASE
-class TanhExecute :public Execute {
-  public:
-    bool bTrain;
-  public:
-    inline void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
-        for (int idx = 0; idx < count; idx++) {
-            TanhNode* ptr = (TanhNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
-        for (int idx = 0; idx < count; idx++) {
-            TanhNode* ptr = (TanhNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
-        }
-    }
-};
-
-inline PExecute TanhNode::generate(bool bTrain) {
-    TanhExecute* exec = new TanhExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-};
-
-#else
 class TanhExecute :public Execute {
   public:
     Tensor1D x, y;
@@ -539,7 +294,6 @@ inline PExecute TanhNode::generate(bool bTrain) {
     exec->bTrain = bTrain;
     return exec;
 };
-#endif
 
 
 class SigmoidNode :public Node {
@@ -588,123 +342,6 @@ class SigmoidNode :public Node {
     }
 };
 
-#if USE_GPU
-class SigmoidExecute :public Execute {
-  public:
-    Tensor1D x, y;
-    int sumDim;
-    bool bTrain;
-
-  public:
-    ~SigmoidExecute() {
-        sumDim = 0;
-    }
-
-  public:
-    inline void  forward() {
-        int count = batch.size();
-
-        sumDim = 0;
-        for (int idx = 0; idx < count; idx++) {
-            sumDim += batch[idx]->dim;
-        }
-
-        x.init(sumDim, NULL);
-        y.init(sumDim, NULL);
-
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            SigmoidNode* ptr = (SigmoidNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                x[offset + idy] = ptr->in->val[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        y.vec() = x.vec().unaryExpr(ptr_fun(fsigmoid));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            SigmoidNode* ptr = (SigmoidNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->val[idy] = y[offset + idy];
-            }
-            offset += ptr->dim;
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        Tensor1D lx, ly;
-        lx.init(sumDim, NULL);
-        ly.init(sumDim, NULL);
-
-        int count = batch.size();
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            SigmoidNode* ptr = (SigmoidNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ly[offset + idy] = ptr->loss[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        lx.vec() = ly.vec() * x.vec().binaryExpr(y.vec(), ptr_fun(dsigmoid));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            SigmoidNode* ptr = (SigmoidNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->in->loss[idy] += lx[offset + idy];
-            }
-            offset += ptr->dim;
-        }
-    }
-};
-
-inline PExecute SigmoidNode::generate(bool bTrain) {
-    SigmoidExecute* exec = new SigmoidExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-};
-
-#elif USE_BASE
-class SigmoidExecute :public Execute {
-  public:
-    bool bTrain;
-  public:
-    inline void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
-        for (int idx = 0; idx < count; idx++) {
-            SigmoidNode* ptr = (SigmoidNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
-        for (int idx = 0; idx < count; idx++) {
-            SigmoidNode* ptr = (SigmoidNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
-        }
-    }
-};
-
-inline PExecute SigmoidNode::generate(bool bTrain) {
-    SigmoidExecute* exec = new SigmoidExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-};
-
-#else
 class SigmoidExecute :public Execute {
   public:
     Tensor1D x, y;
@@ -785,9 +422,6 @@ inline PExecute SigmoidNode::generate(bool bTrain) {
     exec->bTrain = bTrain;
     return exec;
 };
-#endif
-
-
 
 class ReluNode :public Node {
   public:
@@ -836,123 +470,6 @@ class ReluNode :public Node {
     }
 };
 
-#if USE_GPU
-class ReluExecute :public Execute {
-  public:
-    Tensor1D x, y;
-    int sumDim;
-    bool bTrain;
-
-  public:
-    ~ReluExecute() {
-        sumDim = 0;
-    }
-
-  public:
-    inline void  forward() {
-        int count = batch.size();
-
-        sumDim = 0;
-        for (int idx = 0; idx < count; idx++) {
-            sumDim += batch[idx]->dim;
-        }
-
-        x.init(sumDim, NULL);
-        y.init(sumDim, NULL);
-
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ReluNode* ptr = (ReluNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                x[offset + idy] = ptr->in->val[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        y.vec() = x.vec().unaryExpr(ptr_fun(frelu));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ReluNode* ptr = (ReluNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->val[idy] = y[offset + idy];
-            }
-            offset += ptr->dim;
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        Tensor1D lx, ly;
-        lx.init(sumDim, NULL);
-        ly.init(sumDim, NULL);
-
-        int count = batch.size();
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ReluNode* ptr = (ReluNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ly[offset + idy] = ptr->loss[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        lx.vec() = ly.vec() * x.vec().binaryExpr(y.vec(), ptr_fun(drelu));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ReluNode* ptr = (ReluNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->in->loss[idy] += lx[offset + idy];
-            }
-            offset += ptr->dim;
-        }
-    }
-};
-
-inline PExecute ReluNode::generate(bool bTrain) {
-    ReluExecute* exec = new ReluExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-};
-
-#elif USE_BASE
-class ReluExecute :public Execute {
-  public:
-    bool bTrain;
-  public:
-    inline void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
-        for (int idx = 0; idx < count; idx++) {
-            ReluNode* ptr = (ReluNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
-        for (int idx = 0; idx < count; idx++) {
-            ReluNode* ptr = (ReluNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
-        }
-    }
-};
-
-inline PExecute ReluNode::generate(bool bTrain) {
-    ReluExecute* exec = new ReluExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-};
-
-#else
 class ReluExecute :public Execute {
   public:
     Tensor1D x, y;
@@ -1033,8 +550,6 @@ inline PExecute ReluNode::generate(bool bTrain) {
     exec->bTrain = bTrain;
     return exec;
 };
-#endif
-
 
 class IndexNode :public Node {
   public:
