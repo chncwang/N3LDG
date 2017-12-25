@@ -133,10 +133,6 @@ class ModelUpdate {
     inline void clear() {
         _params.clear();
     }
-
-
 };
-
-
 
 #endif /* ModelUpdate_H_ */

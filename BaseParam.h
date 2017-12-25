@@ -34,8 +34,6 @@ struct BaseParam {
     virtual inline void randpoint(int& idx, int &idy) = 0;
     virtual inline dtype squareGradNorm() = 0;
     virtual inline void rescaleGrad(dtype scale) = 0;
-    virtual inline void save(std::ofstream &os)const = 0;
-    virtual inline void load(std::ifstream &is) = 0;
 };
 
 #endif /* BasePARAM_H_ */

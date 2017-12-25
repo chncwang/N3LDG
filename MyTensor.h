@@ -8,6 +8,8 @@
 
 using namespace Eigen;
 
+namespace n3ldg_cpu {
+
 struct Tensor1D {
   private:
     size_t memsize;
@@ -278,6 +280,7 @@ struct Tensor2D {
     }
 
 };
+}
 
 
 //useful functions
@@ -332,9 +335,6 @@ inline dtype drelu(const dtype& x, const dtype& y) {
 inline dtype dexp(const dtype& x, const dtype& y) {
     return y;
 }
-
-
-
 
 
 #endif

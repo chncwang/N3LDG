@@ -14,6 +14,9 @@
 #include "Node.h"
 #include "Graph.h"
 
+#if USE_GPU
+#else
+
 class PMultiNode : public Node {
   public:
     PNode in1, in2;
@@ -256,6 +259,8 @@ inline PExecute PMultiNode::generate(bool bTrain) {
     exec->bTrain = bTrain;
     return exec;
 }
+
+#endif
 #endif
 
 

@@ -25,6 +25,8 @@ PDotNode
 #include "Graph.h"
 #include "ModelUpdate.h"
 
+#if USE_GPU
+#else 
 class ActivateNode :public Node {
   public:
     PNode in;
@@ -862,5 +864,6 @@ PExecute GrlNode::generate(bool bTrain) {
     execute->batch.push_back(this);
     return execute;
 }
+#endif
 
 #endif

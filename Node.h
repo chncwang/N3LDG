@@ -14,9 +14,18 @@
 */
 
 #include "MyTensor.h"
+#include "n3ldg_cuda.h"
 
 #include <array>
 #include <string>
+
+#if USE_GPU
+using n3ldg_cuda::Tensor1D;
+using n3ldg_cuda::Tensor2D;
+#else
+using n3ldg_cpu::Tensor1D;
+using n3ldg_cpu::Tensor2D;
+#endif
 
 enum NodeType {
     SCALAR_MULTIPLY = 0,
@@ -38,6 +47,7 @@ public:
 public:
     Tensor1D val;
     Tensor1D loss;
+
 public:
     int dim;
     int degree;
@@ -56,6 +66,9 @@ public:
         node_type = "interface";
         drop_value = -1;
     }
+
+    Node(const Node &) = default;
+    Node(Node &&) = default;
 
     virtual ~Node() {
         val = 0;

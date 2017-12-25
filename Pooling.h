@@ -19,7 +19,6 @@ class PoolNode : public Node {
     vector<Tensor1D> masks;
     vector<PNode> ins;
 
-  public:
     PoolNode() : Node() {
         ins.clear();
     }
@@ -108,7 +107,6 @@ class MaxPoolNode : public PoolNode {
         node_type = "max-pooling";
     }
 
-  public:
     //Be careful that the row is the dim of input vector, and the col is the number of input vectors
     //Another point is that we change the input vectors directly.
     void setMask() {
@@ -131,104 +129,6 @@ class MaxPoolNode : public PoolNode {
 };
 
 
-class SumPoolNode : public PoolNode {
-  public:
-    SumPoolNode() : PoolNode() {
-        node_type = "sum-pooling";
-    }
-
-  public:
-    //Be careful that the row is the dim of input vector, and the col is the number of input vectors
-    //Another point is that we change the input vectors directly.
-    void setMask() {
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            masks[i] = 1.0;
-        }
-    }
-
-};
-
-
-class MinPoolNode : public PoolNode {
-  public:
-    MinPoolNode() : PoolNode() {
-        node_type = "min-pooling";
-    }
-
-  public:
-    //Be careful that the row is the dim of input vector, and the col is the number of input vectors
-    //Another point is that we change the input vectors directly.
-    void setMask() {
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            masks[i].zero();
-        }
-
-        for (int idx = 0; idx < dim; idx++) {
-            int minIndex = -1;
-            for (int i = 0; i < nSize; ++i) {
-                if (minIndex == -1 || ins[i]->val[idx] < ins[minIndex]->val[idx]) {
-                    minIndex = i;
-                }
-            }
-            masks[minIndex][idx] = 1.0;
-        }
-    }
-
-};
-
-
-
-class AvgPoolNode : public PoolNode {
-  public:
-    AvgPoolNode() : PoolNode() {
-        node_type = "avg-pooling";
-    }
-
-  public:
-    //Be careful that the row is the dim of input vector, and the col is the number of input vectors
-    //Another point is that we change the input vectors directly.
-    void setMask() {
-        int nSize = ins.size();
-        for (int i = 0; i < nSize; ++i) {
-            masks[i] = 1.0 / nSize;
-        }
-    }
-};
-
-
-//#if USE_GPU
-//class PoolExecute : public Execute {
-//public:
-//  bool bTrain;
-//public:
-//  inline void  forward() {
-//    int count = batch.size();
-//    for (int idx = 0; idx < count; idx++) {
-//      PoolNode* ptr = (PoolNode*)batch[idx];
-//      ptr->compute();
-//      ptr->forward_drop(bTrain);
-//    }
-//  }
-//
-//  inline void backward() {
-//    int count = batch.size();
-//    for (int idx = 0; idx < count; idx++) {
-//      PoolNode* ptr = (PoolNode*)batch[idx];
-//      ptr->backward_drop();
-//      ptr->backward();
-//    }
-//  }
-//};
-//
-//inline PExecute PoolNode::generate(bool bTrain) {
-//  PoolExecute* exec = new PoolExecute();
-//  exec->batch.push_back(this);
-//  exec->bTrain = bTrain;
-//  return exec;
-//}
-//#else
 class PoolExecute : public Execute {
   public:
     bool bTrain;

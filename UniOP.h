@@ -42,23 +42,6 @@ class UniParams {
             b.initial(nOSize, 1);
         }
     }
-
-    inline void save(std::ofstream &os) const {
-        os << bUseB << std::endl;
-        W.save(os);
-        if (bUseB) {
-            b.save(os);
-        }
-    }
-
-    inline void load(std::ifstream &is) {
-        is >> bUseB;
-        W.load(is);
-        if (bUseB) {
-            b.load(is);
-        }
-    }
-
 };
 
 
@@ -82,6 +65,9 @@ class UniNode : public Node {
         param = NULL;
         node_type = "uni";
     }
+
+    UniNode(const UniNode &) = default;
+    UniNode(UniNode &&) = default;
 
     ~UniNode() {
         in = NULL;
@@ -230,13 +216,15 @@ class LinearNode : public Node {
     PNode in;
     UniParams* param;
 
-  public:
     LinearNode() : Node() {
         in = NULL;
         param = NULL;
         node_type = "linear";
     }
 
+    LinearNode(LinearNode&&) = default;
+
+    LinearNode(const LinearNode &) = delete;
 
     inline void setParam(UniParams* paramInit) {
         param = paramInit;
