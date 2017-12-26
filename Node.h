@@ -14,12 +14,12 @@
 */
 
 #include "MyTensor.h"
-#include "n3ldg_cuda.h"
 
 #include <array>
 #include <string>
 
 #if USE_GPU
+#include "n3ldg_cuda.h"
 using n3ldg_cuda::Tensor1D;
 using n3ldg_cuda::Tensor2D;
 #else
