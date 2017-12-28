@@ -277,7 +277,7 @@ class LinearNode : public Node {
 #if USE_GPU
 class UniExecute :public Execute {
   public:
-    Tensor2D x, ty, y, b;
+    Tensor2D x, ty, b, y;
     int inDim, outDim;
     UniParams* param;
     dtype(*activate)(const dtype&);   // activation function
@@ -285,7 +285,6 @@ class UniExecute :public Execute {
     bool bTrain;
 
     inline void forward() {
-        assert(param->bUseB);
         int count = batch.size();
         ty.init(outDim, count);
         x.init(inDim, count);
@@ -328,16 +327,26 @@ class UniExecute :public Execute {
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
         }
-        n3ldg_cuda::CopyFromOneVectorToMultiVectors(param->b.val.value,
-                ty.value, batch.size(), outDim);
-        n3ldg_cuda::MatrixMultiplyVectorBatched(Ws, xs, tys, outDim, inDim,
+        n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
+                ty.value,
+                count,
+                inDim,
+                outDim);
+        n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
+                ty.value,
+                outDim,
+                inDim,
+                count,
                 param->bUseB);
-        ty.copyFromDeviceToHost();
-        n3ldg_cuda::Tanh(ty.value, ys, outDim);
+        n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
             n->val.copyFromDeviceToHost();
         }
+        x.copyFromDeviceToHost();
+        y.copyFromHostToDevice();
+        ty.copyFromHostToDevice();
+        b.copyFromHostToDevice();
     }
 
     inline void backward() {
