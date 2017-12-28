@@ -15,6 +15,9 @@
 #include "Node.h"
 #include "Graph.h"
 #include "ModelUpdate.h"
+#if USE_GPU
+#include "n3ldg_cuda.h"
+#endif
 
 class UniParams {
   public:
@@ -281,41 +284,59 @@ class UniExecute :public Execute {
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
     bool bTrain;
 
-  public:
-    inline void  forward() {
+    inline void forward() {
+        assert(param->bUseB);
         int count = batch.size();
+        ty.init(outDim, count);
         x.init(inDim, count);
         b.init(outDim, count);
-        ty.init(outDim, count);
         y.init(outDim, count);
+//        for (int idx = 0; idx < count; idx++) {
+//            UniNode* ptr = (UniNode*)batch[idx];
+//            for (int idy = 0; idy < inDim; idy++) {
+//                x[idx][idy] = ptr->in->val[idy];
+//            }
+//            if (param->bUseB) {
+//                for (int idy = 0; idy < outDim; idy++) {
+//                    b[idx][idy] = param->b.val.v[idy];
+//                }
+//            }
+//        }
 
+//        ty.mat() = param->W.val.mat() * x.mat();
 
-        for (int idx = 0; idx < count; idx++) {
-            UniNode* ptr = (UniNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->in->val[idy];
-            }
-            if (param->bUseB) {
-                for (int idy = 0; idy < outDim; idy++) {
-                    b[idx][idy] = param->b.val.v[idy];
-                }
-            }
+//        if (param->bUseB) {
+//            ty.vec() = ty.vec() + b.vec();
+//        }
+
+//        y.vec() = ty.vec().unaryExpr(ptr_fun(activate));
+
+//        for (int idx = 0; idx < count; idx++) {
+//            UniNode* ptr = (UniNode*)batch[idx];
+//            for (int idy = 0; idy < outDim; idy++) {
+//                ptr->val[idy] = y[idx][idy];
+//            }
+//        }
+        std::vector<dtype*> xs, ys;
+        xs.reserve(batch.size());
+        ys.reserve(batch.size());
+        param->W.val.copyFromHostToDevice();
+        param->b.val.copyFromHostToDevice();
+        for (int i = 0; i < batch.size(); ++i) {
+            UniNode *n = static_cast<UniNode*>(batch.at(i));
+            n->in->val.copyFromHostToDevice();
+            xs.push_back(n->in->val.value);
+            ys.push_back(n->val.value);
         }
-
-        ty.mat() = param->W.val.mat() * x.mat();
-
-        if (param->bUseB) {
-            ty.vec() = ty.vec() + b.vec();
-        }
-
-        y.vec() = ty.vec().unaryExpr(ptr_fun(activate));
-
-        for (int idx = 0; idx < count; idx++) {
-            UniNode* ptr = (UniNode*)batch[idx];
-            for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
-            }
-            ptr->forward_drop(bTrain);
+        n3ldg_cuda::CopyFromOneVectorToMultiVectors(param->b.val.value,
+                ty.value, batch.size(), outDim);
+        n3ldg_cuda::MatrixMultiplyVectorBatched(Ws, xs, tys, outDim, inDim,
+                param->bUseB);
+        ty.copyFromDeviceToHost();
+        n3ldg_cuda::Tanh(ty.value, ys, outDim);
+        for (int i = 0; i<batch.size(); ++i) {
+            UniNode *n = static_cast<UniNode*>(batch.at(i));
+            n->val.copyFromDeviceToHost();
         }
     }
 

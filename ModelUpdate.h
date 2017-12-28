@@ -10,7 +10,9 @@
 
 #include "BaseParam.h"
 #include "MyLib.h"
-
+#if USE_GPU
+#include "n3ldg_cuda.h"
+#endif
 
 class ModelUpdate {
 
@@ -80,7 +82,19 @@ class ModelUpdate {
         }
     }
 
-    inline void updateAdam(dtype maxScale) {
+    void updateAdam(dtype maxScale) {
+#if USE_GPU
+//        std::vector<dtype*> grads;
+//        grads.reserve(_params.size());
+//        std::vector<int> lens;
+//        lens.reserve(_params.size());
+//        for (BaseParam *param : _params) {
+//            grads.push_back(param->grad.v);
+//            std::cout << "row:" << param->grad.row << " col:" << param->grad.col << std::endl;
+//            lens.push_back(param->grad.size());
+//        }
+//        n3ldg_cuda::RescaleGrads(grads, lens, maxScale);
+#endif
         dtype sumNorm = 0.0;
         for (int idx = 0; idx < _params.size(); idx++) {
             sumNorm += _params[idx]->squareGradNorm();
@@ -96,9 +110,16 @@ class ModelUpdate {
                 _params[idx]->rescaleGrad(scale);
             }
         }
-
+#if USE_GPU
+#if N3LDG_DEBUG
+//        for (BaseParam *param : _params) {
+//            param->grad.verify();
+//        }
+#endif
+#endif
         updateAdam();
     }
+
 
     inline void rescaleGrad(dtype scale) {
         for (int idx = 0; idx < _params.size(); idx++) {
