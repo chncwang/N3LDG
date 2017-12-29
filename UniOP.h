@@ -290,32 +290,6 @@ class UniExecute :public Execute {
         x.init(inDim, count);
         b.init(outDim, count);
         y.init(outDim, count);
-//        for (int idx = 0; idx < count; idx++) {
-//            UniNode* ptr = (UniNode*)batch[idx];
-//            for (int idy = 0; idy < inDim; idy++) {
-//                x[idx][idy] = ptr->in->val[idy];
-//            }
-//            if (param->bUseB) {
-//                for (int idy = 0; idy < outDim; idy++) {
-//                    b[idx][idy] = param->b.val.v[idy];
-//                }
-//            }
-//        }
-
-//        ty.mat() = param->W.val.mat() * x.mat();
-
-//        if (param->bUseB) {
-//            ty.vec() = ty.vec() + b.vec();
-//        }
-
-//        y.vec() = ty.vec().unaryExpr(ptr_fun(activate));
-
-//        for (int idx = 0; idx < count; idx++) {
-//            UniNode* ptr = (UniNode*)batch[idx];
-//            for (int idy = 0; idy < outDim; idy++) {
-//                ptr->val[idy] = y[idx][idy];
-//            }
-//        }
         std::vector<dtype*> xs, ys;
         xs.reserve(batch.size());
         ys.reserve(batch.size());
@@ -344,9 +318,9 @@ class UniExecute :public Execute {
             n->val.copyFromDeviceToHost();
         }
         x.copyFromDeviceToHost();
-        y.copyFromHostToDevice();
-        ty.copyFromHostToDevice();
-        b.copyFromHostToDevice();
+        y.copyFromDeviceToHost();
+        ty.copyFromDeviceToHost();
+        b.copyFromDeviceToHost();
     }
 
     inline void backward() {
