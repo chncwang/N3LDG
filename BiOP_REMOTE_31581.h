@@ -1,50 +1,45 @@
-#ifndef FOUROP_H_
-#define FOUROP_H_
+#ifndef BIOP_H_
+#define BIOP_H_
 
 /*
-*  FourOP.h:
-*  a simple feed forward neural operation, four variable input.
+*  BiOP.h:
+*  a simple feed forward neural operation, binary input.
 *
 *  Created on: June 11, 2017
 *      Author: mszhang
 */
 
+
 #include "Param.h"
 #include "MyLib.h"
 #include "Node.h"
 #include "Graph.h"
+#include "ModelUpdate.h"
 
-class FourParams {
+class BiParams {
   public:
     Param W1;
     Param W2;
-    Param W3;
-    Param W4;
     Param b;
 
     bool bUseB;
 
   public:
-    FourParams() {
+    BiParams() {
         bUseB = true;
     }
 
     inline void exportAdaParams(ModelUpdate& ada) {
         ada.addParam(&W1);
         ada.addParam(&W2);
-        ada.addParam(&W3);
-        ada.addParam(&W4);
         if (bUseB) {
             ada.addParam(&b);
         }
     }
 
-    inline void initial(int nOSize, int nISize1, int nISize2, int nISize3, int nISize4, bool useB = true) {
+    inline void initial(int nOSize, int nISize1, int nISize2, bool useB = true) {
         W1.initial(nOSize, nISize1);
         W2.initial(nOSize, nISize2);
-        W3.initial(nOSize, nISize3);
-        W4.initial(nOSize, nISize4);
-
         bUseB = useB;
         if (bUseB) {
             b.initial(nOSize, 1);
@@ -55,8 +50,6 @@ class FourParams {
         os << bUseB << std::endl;
         W1.save(os);
         W2.save(os);
-        W3.save(os);
-        W4.save(os);
         if (bUseB) {
             b.save(os);
         }
@@ -66,8 +59,6 @@ class FourParams {
         is >> bUseB;
         W1.load(is);
         W2.load(is);
-        W3.load(is);
-        W4.load(is);
         if (bUseB) {
             b.load(is);
         }
@@ -79,26 +70,26 @@ class FourParams {
 // input nodes should be specified by forward function
 // for input variables, we exploit column vector,
 // which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
-class FourNode : public Node {
+class BiNode : public Node {
   public:
-    PNode in1, in2, in3, in4;
-    FourParams* param;
+    PNode in1, in2;
+    BiParams* param;
     dtype(*activate)(const dtype&);   // activation function
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
     Tensor1D ty, lty;
 
 
   public:
-    FourNode() : Node() {
-        in1 = in2 = in3 = in4 = NULL;
+    BiNode() : Node() {
+        in1 = in2 = NULL;
         activate = ftanh;
         derivate = dtanh;
         param = NULL;
-        node_type = "four";
+        node_type = "bi";
     }
 
-    ~FourNode() {
-        in1 = in2 = in3 = in4 = NULL;
+    ~BiNode() {
+        in1 = in2 = NULL;
     }
 
     inline void init(int ndim, dtype dropout) {
@@ -107,13 +98,13 @@ class FourNode : public Node {
         lty.init(ndim);
     }
 
-    inline void setParam(FourParams* paramInit) {
+    inline void setParam(BiParams* paramInit) {
         param = paramInit;
     }
 
     inline void clearValue() {
         Node::clearValue();
-        in1 = in2 = in3 = in4 = NULL;
+        in1 = in2 = NULL;
         ty = 0;
         lty = 0;
     }
@@ -124,24 +115,20 @@ class FourNode : public Node {
         derivate = f_deri;
     }
 
+
   public:
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4) {
+    void forward(Graph *cg, PNode x1, PNode x2) {
         in1 = x1;
         in2 = x2;
-        in3 = x3;
-        in4 = x4;
         degree = 0;
         in1->addParent(this);
         in2->addParent(this);
-        in3->addParent(this);
-        in4->addParent(this);
         cg->addNode(this);
     }
 
   public:
     inline void compute() {
-        ty.mat() = param->W1.val.mat() * in1->val.mat() + param->W2.val.mat() * in2->val.mat()
-                   + param->W3.val.mat() * in3->val.mat() + param->W4.val.mat() * in4->val.mat();
+        ty.mat() = param->W1.val.mat() * in1->val.mat() + param->W2.val.mat() * in2->val.mat();
         if (param->bUseB) {
             ty.vec() += param->b.val.vec();
         }
@@ -153,8 +140,6 @@ class FourNode : public Node {
 
         param->W1.grad.mat() += lty.mat() * in1->val.tmat();
         param->W2.grad.mat() += lty.mat() * in2->val.tmat();
-        param->W3.grad.mat() += lty.mat() * in3->val.tmat();
-        param->W4.grad.mat() += lty.mat() * in4->val.tmat();
 
         if (param->bUseB) {
             param->b.grad.vec() += lty.vec();
@@ -162,8 +147,6 @@ class FourNode : public Node {
 
         in1->loss.mat() += param->W1.val.mat().transpose() * lty.mat();
         in2->loss.mat() += param->W2.val.mat().transpose() * lty.mat();
-        in3->loss.mat() += param->W3.val.mat().transpose() * lty.mat();
-        in4->loss.mat() += param->W4.val.mat().transpose() * lty.mat();
     }
 
   public:
@@ -174,7 +157,7 @@ class FourNode : public Node {
         bool result = Node::typeEqual(other);
         if (!result) return false;
 
-        FourNode* conv_other = (FourNode*)other;
+        BiNode* conv_other = (BiNode*)other;
         if (param != conv_other->param) {
             return false;
         }
@@ -192,45 +175,41 @@ class FourNode : public Node {
 // input nodes should be specified by forward function
 // for input variables, we exploit column vector,
 // which means a concrete input vector x_i is represented by x(0, i), x(1, i), ..., x(n, i)
-class LinearFourNode : public Node {
+class LinearBiNode : public Node {
   public:
-    PNode in1, in2, in3, in4;
-    FourParams* param;
+    PNode in1, in2;
+    BiParams* param;
 
   public:
-    LinearFourNode() : Node() {
-        in1 = in2 = in3 = in4 = NULL;
+    LinearBiNode() : Node() {
+        in1 = in2 = NULL;
         param = NULL;
-        node_type = "linear_four";
+        node_type = "linear_bi";
     }
 
-    inline void setParam(FourParams* paramInit) {
+    inline void setParam(BiParams* paramInit) {
         param = paramInit;
     }
 
     inline void clearValue() {
         Node::clearValue();
-        in1 = in2 = in3 = in4 = NULL;
+        in1 = in2 = NULL;
     }
 
+
   public:
-    void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4) {
+    void forward(Graph *cg, PNode x1, PNode x2) {
         in1 = x1;
         in2 = x2;
-        in3 = x3;
-        in4 = x4;
         degree = 0;
         in1->addParent(this);
         in2->addParent(this);
-        in3->addParent(this);
-        in4->addParent(this);
         cg->addNode(this);
     }
 
   public:
     inline void compute() {
-        val.mat() = param->W1.val.mat() * in1->val.mat() + param->W2.val.mat() * in2->val.mat()
-                    + param->W3.val.mat() * in3->val.mat() + param->W4.val.mat() * in4->val.mat();
+        val.mat() = param->W1.val.mat() * in1->val.mat() + param->W2.val.mat() * in2->val.mat();
 
         if (param->bUseB) {
             val.vec() += param->b.val.vec();
@@ -240,8 +219,6 @@ class LinearFourNode : public Node {
     inline void backward() {
         param->W1.grad.mat() += loss.mat() * in1->val.tmat();
         param->W2.grad.mat() += loss.mat() * in2->val.tmat();
-        param->W3.grad.mat() += loss.mat() * in3->val.tmat();
-        param->W4.grad.mat() += loss.mat() * in4->val.tmat();
 
         if (param->bUseB) {
             param->b.grad.vec() += loss.vec();
@@ -249,8 +226,6 @@ class LinearFourNode : public Node {
 
         in1->loss.mat() += param->W1.val.mat().transpose() * loss.mat();
         in2->loss.mat() += param->W2.val.mat().transpose() * loss.mat();
-        in3->loss.mat() += param->W3.val.mat().transpose() * loss.mat();
-        in4->loss.mat() += param->W4.val.mat().transpose() * loss.mat();
     }
 
   public:
@@ -261,7 +236,7 @@ class LinearFourNode : public Node {
         bool result = Node::typeEqual(other);
         if (!result) return false;
 
-        LinearFourNode* conv_other = (LinearFourNode*)other;
+        LinearBiNode* conv_other = (LinearBiNode*)other;
         if (param != conv_other->param) {
             return false;
         }
@@ -272,7 +247,7 @@ class LinearFourNode : public Node {
 };
 
 
-class FourExecute :public Execute {
+class BiExecute :public Execute {
   public:
     bool bTrain;
   public:
@@ -295,15 +270,15 @@ class FourExecute :public Execute {
     }
 };
 
-inline PExecute FourNode::generate(bool bTrain, dtype cur_drop_factor) {
-    FourExecute* exec = new FourExecute();
+inline PExecute BiNode::generate(bool bTrain, dtype cur_drop_factor) {
+    BiExecute* exec = new BiExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
     return exec;
 };
 
-class LinearFourExecute :public Execute {
+class LinearBiExecute :public Execute {
   public:
     bool bTrain;
   public:
@@ -326,12 +301,12 @@ class LinearFourExecute :public Execute {
     }
 };
 
-inline PExecute LinearFourNode::generate(bool bTrain, dtype cur_drop_factor) {
-    LinearFourExecute* exec = new LinearFourExecute();
+inline PExecute LinearBiNode::generate(bool bTrain, dtype cur_drop_factor) {
+    LinearBiExecute* exec = new LinearBiExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
     return exec;
 };
 
-#endif /* FOUROP_H_ */
+#endif /* BIOP_H_ */

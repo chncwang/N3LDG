@@ -83,8 +83,13 @@ class ActivateNode :public Node {
     }
 };
 
+<<<<<<< HEAD
 class ActivateExecute :public Execute {
   public:
+    Tensor1D x, y;
+    dtype(*activate)(const dtype&);   // activation function
+    dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
+    int sumDim;
     bool bTrain;
 
   public:

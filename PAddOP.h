@@ -57,6 +57,22 @@ class PAddNode : public Node {
         cg->addNode(this);
     }
 
+    void forward(Graph *cg, PNode x1) {
+        ins.clear();
+        if (x1->dim == dim) {
+            ins.push_back(x1);
+        } else {
+            std::cout << "dim does not match" << std::endl;
+        }
+
+        degree = 0;
+        int nSize = ins.size();
+        for (int i = 0; i < nSize; ++i) {
+            ins[i]->addParent(this);
+        }
+
+        cg->addNode(this);
+    }
 
     void forward(Graph *cg, PNode x1, PNode x2) {
         ins.clear();
@@ -241,7 +257,7 @@ class PAddNode : public Node {
 
 
   public:
-    inline PExecute generate(bool bTrain);
+    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -250,72 +266,38 @@ class PAddNode : public Node {
 
 };
 
-//#if USE_GPU
-//class PAddExecute : public Execute {
-//public:
-//  bool bTrain;
-//public:
-//  inline void  forward() {
-//    int count = batch.size();
-//
-//    for (int idx = 0; idx < count; idx++) {
-//      PAddNode* ptr = (PAddNode*)batch[idx];
-//      ptr->compute();
-//      ptr->forward_drop(bTrain);
-//    }
-//  }
-//
-//  inline void backward() {
-//    int count = batch.size();
-//    for (int idx = 0; idx < count; idx++) {
-//      PAddNode* ptr = (PAddNode*)batch[idx];
-//      ptr->backward_drop();
-//      ptr->backward();
-//    }
-//  }
-//};
-//
-//
-//inline PExecute PAddNode::generate(bool bTrain) {
-//  PAddExecute* exec = new PAddExecute();
-//  exec->batch.push_back(this);
-//  exec->bTrain = bTrain;
-//  return exec;
-//}
-//#else
+
 class PAddExecute : public Execute {
   public:
     bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            PAddNode* ptr = (PAddNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
     inline void backward() {
         int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            PAddNode* ptr = (PAddNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
         }
     }
 };
 
 
-inline PExecute PAddNode::generate(bool bTrain) {
+inline PExecute PAddNode::generate(bool bTrain, dtype cur_drop_factor) {
     PAddExecute* exec = new PAddExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
+    exec->drop_factor = cur_drop_factor;
     return exec;
 }
-//#endif
 
 
 #endif

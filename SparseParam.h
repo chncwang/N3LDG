@@ -30,12 +30,13 @@ class SparseParam : public BaseParam {
     // allow sparse and dense parameters have different parameter initialization methods
     inline void initial(int outDim, int inDim) {
         //not in the aligned memory pool
-        val.init(outDim, inDim);
-        dtype bound = sqrt(3.0 / (outDim));
+        val.init(inDim, outDim);
+        dtype bound = sqrt(6.0 / (outDim + inDim));
+        //dtype bound = 0.001;
         val.random(bound);
-        grad.init(outDim, inDim);
-        aux_square.init(outDim, inDim);
-        aux_mean.init(outDim, inDim);
+        grad.init(inDim, outDim);
+        aux_square.init(inDim, outDim);
+        aux_mean.init(inDim, outDim);
         indexers.resize(inDim);
         indexers = false;
         last_update.resize(inDim);
@@ -46,7 +47,7 @@ class SparseParam : public BaseParam {
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
-            for (int idx = 0; idx < grad.row; idx++) {
+            for (int idx = 0; idx < grad.col; idx++) {
                 grad[index][idx] = 0;
             }
         }
@@ -54,18 +55,18 @@ class SparseParam : public BaseParam {
     }
 
     inline int outDim() {
-        return val.row;
+        return val.col;
     }
 
     inline int inDim() {
-        return val.col;
+        return val.row;
     }
 
     inline void updateAdagrad(dtype alpha, dtype reg, dtype eps) {
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
-            for (int idx = 0; idx < grad.row; idx++) {
+            for (int idx = 0; idx < grad.col; idx++) {
                 grad[index][idx] = grad[index][idx] + val[index][idx] * reg;
                 aux_square[index][idx] = aux_square[index][idx] + grad[index][idx] * grad[index][idx];
                 val[index][idx] = val[index][idx] - grad[index][idx] * alpha / sqrt(aux_square[index][idx] + eps);
@@ -78,7 +79,7 @@ class SparseParam : public BaseParam {
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
-            for (int idx = 0; idx < grad.row; idx++) {
+            for (int idx = 0; idx < grad.col; idx++) {
                 grad[index][idx] = grad[index][idx] + val[index][idx] * reg;
                 aux_mean[index][idx] = belta1 * aux_mean[index][idx] + (1 - belta1) * grad[index][idx];
                 aux_square[index][idx] = belta2 * aux_square[index][idx] + (1 - belta2) * grad[index][idx] * grad[index][idx];
@@ -97,18 +98,18 @@ class SparseParam : public BaseParam {
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
-            idCols.push_back(index);
+            idRows.push_back(index);
         }
 
-        for (int i = 0; i < val.row; i++) {
-            idRows.push_back(i);
+        for (int i = 0; i < val.col; i++) {
+            idCols.push_back(i);
         }
 
         random_shuffle(idRows.begin(), idRows.end());
         random_shuffle(idCols.begin(), idCols.end());
 
-        idx = idCols[0];
-        idy = idRows[0];
+        idx = idRows[0];
+        idy = idCols[0];
     }
 
     inline dtype squareGradNorm() {
@@ -116,7 +117,7 @@ class SparseParam : public BaseParam {
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
-            for (int idx = 0; idx < val.row; idx++) {
+            for (int idx = 0; idx < val.col; idx++) {
                 sumNorm += grad[index][idx] * grad[index][idx];
             }
         }
@@ -128,47 +129,52 @@ class SparseParam : public BaseParam {
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
-            for (int idx = 0; idx < val.row; idx++) {
+            for (int idx = 0; idx < val.col; idx++) {
                 grad[index][idx] = grad[index][idx] * scale;
             }
         }
     }
 
+<<<<<<< HEAD
     void value(const int& featId, Tensor1D& out) {
         if (out.dim != val.row) {
+=======
+    inline void value(const int& featId, Tensor1D& out) {
+        if (out.dim != val.col) {
+>>>>>>> official
             std::cout << "warning: output dim not equal lookup param dim." << std::endl;
         }
-        for (int idx = 0; idx < val.row; idx++) {
+        for (int idx = 0; idx < val.col; idx++) {
             out[idx] = val[featId][idx];
         }
     }
 
     inline void value(const vector<int>& featIds, Tensor1D& out) {
-        if (out.dim != val.row) {
+        if (out.dim != val.col) {
             std::cout << "warning: output dim not equal lookup param dim." << std::endl;
         }
         int featNum = featIds.size();
         int featId;
         for (int i = 0; i < featNum; i++) {
             featId = featIds[i];
-            for (int idx = 0; idx < val.row; idx++) {
+            for (int idx = 0; idx < val.col; idx++) {
                 out[idx] += val[featId][idx];
             }
         }
     }
 
     inline void loss(const int& featId, const Tensor1D& loss) {
-        if (loss.dim != val.row) {
+        if (loss.dim != val.col) {
             std::cout << "warning: loss dim not equal lookup param dim." << std::endl;
         }
         indexers[featId] = true;
-        for (int idx = 0; idx < val.row; idx++) {
+        for (int idx = 0; idx < val.col; idx++) {
             grad[featId][idx] += loss[idx];
         }
     }
 
     inline void loss(const vector<int>& featIds, const Tensor1D& loss) {
-        if (loss.dim != val.row) {
+        if (loss.dim != val.col) {
             std::cout << "warning: loss dim not equal lookup param dim." << std::endl;
         }
         int featNum = featIds.size();
@@ -176,11 +182,37 @@ class SparseParam : public BaseParam {
         for (int i = 0; i < featNum; i++) {
             featId = featIds[i];
             indexers[featId] = true;
-            for (int idx = 0; idx < val.row; idx++) {
+            for (int idx = 0; idx < val.col; idx++) {
                 grad[featId][idx] += loss[idx];
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    inline void save(std::ofstream &os)const {
+        val.save(os);
+        aux_square.save(os);
+        aux_mean.save(os);
+        os << val.row << std::endl;
+        for (int idx = 0; idx < val.row; idx++) {
+            os << last_update[idx] << std::endl;
+        }
+    }
+
+    inline void load(std::ifstream &is) {
+        val.load(is);
+        aux_square.load(is);
+        aux_mean.load(is);
+        int curInDim;
+        is >> curInDim;
+        last_update.resize(curInDim);
+        for (int idx = 0; idx < curInDim; idx++) {
+            is >> last_update[idx];
+        }
+    }
+
+>>>>>>> official
 };
 
 #endif /* SPARSEPARAM_H_ */

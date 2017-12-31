@@ -147,14 +147,24 @@ struct Tensor2D {
     //please call this function before using it really. must! must! must!
     //only this function allocates memories
     inline void init(int nrow, int ncol) {
-        col = ncol;
         row = nrow;
+<<<<<<< HEAD
         v = new dtype[size()];
+=======
+        col = ncol;
+        size = col * row;
+        v = new dtype[size];
+        memsize = size * sizeof(dtype);
+>>>>>>> official
         zero();
     }
 
     inline void zero() {
+<<<<<<< HEAD
         if(v)memset((void*)v, 0, col * row * sizeof(dtype));;
+=======
+        if(v)memset((void*)v, 0, memsize);
+>>>>>>> official
     }
 
     const Mat mat() const {
@@ -175,12 +185,12 @@ struct Tensor2D {
 
 
     //use it carefully, first col, then row, because rows are allocated successively
-    inline dtype* operator[](const int icol) {
-        return &(v[icol*row]);  // no boundary check?
+    inline dtype* operator[](const int irow) {
+        return &(v[irow*col]);  // no boundary check?
     }
 
-    inline const dtype* operator[](const int icol) const {
-        return &(v[icol*row]);  // no boundary check?
+    inline const dtype* operator[](const int irow) const {
+        return &(v[irow*col]);  // no boundary check?
     }
 
     //use it carefully
@@ -231,18 +241,18 @@ struct Tensor2D {
         }
     }
 
-    // for embeddings only, embedding matrix: dim  * vocabulary
+    // for embeddings only, embedding matrix: vocabulary  * dim
     // each word's embedding is notmalized
-    inline void norm2one() {
+    inline void norm2one(dtype norm = 1.0) {
         dtype sum;
-        for (int idx = 0; idx < col; idx++) {
+        for (int idx = 0; idx < row; idx++) {
             sum = 0.000001;
-            for (int idy = 0; idy < row; idy++) {
+            for (int idy = 0; idy < col; idy++) {
                 sum += (*this)[idx][idy] * (*this)[idx][idy];
             }
-            dtype scale = sqrt(sum);
-            for (int idy = 0; idy < row; idy++) {
-                (*this)[idx][idy] /= scale;
+            dtype scale = sqrt(norm / sum);
+            for (int idy = 0; idy < col; idy++) {
+                (*this)[idx][idy] *= scale;
             }
         }
     }
@@ -294,8 +304,20 @@ inline dtype fleaky_relu(const dtype& x) {
     if (x < 0) return (0.1*x);
     return x;
 }
+
+inline dtype fselu(const dtype& x) {
+    dtype lambda = 1.0507009873554804934193349852946;
+    dtype alpha = 1.6732632423543772848170429916717;
+    if (x <= 0) return lambda * alpha * (exp(x) - 1);
+    return lambda * x;
+}
+
 inline dtype fexp(const dtype& x) {
     return exp(x);
+}
+
+inline dtype flog(const dtype& x) {
+    return log(x);
 }
 
 //derive function
@@ -312,6 +334,13 @@ inline dtype dleaky_relu(const dtype& x, const dtype& y) {
     return 1;
 }
 
+inline dtype dselu(const dtype& x, const dtype& y) {
+    dtype lambda = 1.0507009873554804934193349852946;
+    dtype alpha = 1.6732632423543772848170429916717;
+    if (x <= 0) return lambda * alpha + y;
+    return lambda;
+}
+
 inline dtype dsigmoid(const dtype& x, const dtype& y) {
     return (1 - y) * y;
 }
@@ -325,5 +354,14 @@ inline dtype dexp(const dtype& x, const dtype& y) {
     return y;
 }
 
+<<<<<<< HEAD
+=======
+inline dtype dlog(const dtype& x, const dtype& y) {
+    if(x < 0.001) return 1000;
+    return 1.0 / x;
+}
+
+
+>>>>>>> official
 
 #endif

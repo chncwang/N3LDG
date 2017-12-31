@@ -21,6 +21,16 @@
 #include "Windowlized.h"
 #include "UniOP.h"
 #include "SoftMaxLoss.h"
+<<<<<<< HEAD
 #include "SparseOP.h"
+=======
+#include "TransferOP.h"
+#include "AttentionHelp.h"
+#include "Attention.h"
+#include "APOP.h"
+#include "SparseOP.h"
+#include "ActionOP.h"
+#include "LogSoftMax.h"
+>>>>>>> official
 
 #endif

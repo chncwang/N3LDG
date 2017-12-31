@@ -30,6 +30,7 @@ class Graph {
 
   public:
     bool train;
+    dtype drop_factor;
 
   public:
     Graph() {
@@ -37,6 +38,7 @@ class Graph {
         execs.clear();
         nodes.clear();
         free_nodes.clear();
+        drop_factor = 1.0;
     }
 
     virtual ~Graph() {
@@ -48,6 +50,13 @@ class Graph {
         execs.clear();
         nodes.clear();
         free_nodes.clear();
+    }
+
+
+    inline void setDropFactor(dtype cur_drop_factor) {
+        drop_factor = cur_drop_factor;
+        if (drop_factor <= 0) drop_factor = 0;
+        if (drop_factor >= 1.0) drop_factor = 1.0;
     }
 
   public:
@@ -103,7 +112,7 @@ class Graph {
                 }
 
                 if (!find) {
-                    PExecute new_exec = free_nodes[idx]->generate(train);
+                    PExecute new_exec = free_nodes[idx]->generate(train, drop_factor);
                     cur_execs.push_back(new_exec);
                     cur_execs_size++;
                 }
@@ -111,7 +120,7 @@ class Graph {
             }
 
             //execute
-//#pragma omp parallel for
+            //#pragma omp parallel for
             for (int idy = 0; idy < cur_execs_size; idy++) {
                 cur_execs[idy]->forward();
             }

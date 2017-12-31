@@ -89,7 +89,7 @@ class AttentionSoftMaxNode : public Node {
 
 
   public:
-    inline PExecute generate(bool bTrain);
+    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -148,29 +148,28 @@ class AttentionSoftMaxExecute : public Execute {
   public:
     inline void  forward() {
         int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            AttentionSoftMaxNode* ptr = (AttentionSoftMaxNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
     inline void backward() {
         int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            AttentionSoftMaxNode* ptr = (AttentionSoftMaxNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
         }
     }
 };
 
-inline PExecute AttentionSoftMaxNode::generate(bool bTrain) {
+inline PExecute AttentionSoftMaxNode::generate(bool bTrain, dtype cur_drop_factor) {
     AttentionSoftMaxExecute* exec = new AttentionSoftMaxExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
+    exec->drop_factor = cur_drop_factor;
     return exec;
 }
 
@@ -258,7 +257,7 @@ class AttentionSoftMaxVNode : public Node {
 
 
   public:
-    inline PExecute generate(bool bTrain);
+    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -316,31 +315,29 @@ class AttentionSoftMaxVExecute : public Execute {
   public:
     inline void  forward() {
         int count = batch.size();
-//#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            AttentionSoftMaxVNode* ptr = (AttentionSoftMaxVNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
     inline void backward() {
         int count = batch.size();
-//#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            AttentionSoftMaxVNode* ptr = (AttentionSoftMaxVNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
         }
     }
 };
 
-inline PExecute AttentionSoftMaxVNode::generate(bool bTrain) {
+inline PExecute AttentionSoftMaxVNode::generate(bool bTrain, dtype cur_drop_factor) {
     AttentionSoftMaxVExecute* exec = new AttentionSoftMaxVExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
+    exec->drop_factor = cur_drop_factor;
     return exec;
 }
-//#endif
 
 #endif
