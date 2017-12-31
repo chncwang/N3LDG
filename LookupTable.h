@@ -44,27 +44,28 @@ class LookupTable {
     }
 
     //initialization by pre-trained embeddings
-    inline bool initial(PAlphabet alpha, const string& inFile, bool fineTune = true, bool bNormalize = true) {
+    inline bool initial(PAlphabet alpha, const string& inFile, bool fineTune = true, dtype norm = -1) {
         elems = alpha;
         nVSize = elems->size();
         nUNKId = elems->from_string(unknownkey);
-        return initialWeights(inFile, fineTune, bNormalize);
+        return initialWeights(inFile, fineTune, norm);
     }
 
     inline void initialWeights(int dim, bool tune) {
-        if (nVSize == 0) {
+        if (nVSize == 0 || (nVSize == 1 && nUNKId >= 0)) {
             std::cout << "please check the alphabet" << std::endl;
             return;
         }
         nDim = dim;
         E.initial(nDim, nVSize);
+        E.val.random(sqrt(1.0 / nDim));
         //E.val.norm2one();
         bFineTune = tune;
     }
 
     // default should be fineTune, just for initialization
-    inline bool initialWeights(const string& inFile, bool tune, bool normalize = true) {
-        if (nVSize == 0 || !elems->is_fixed()) {
+    inline bool initialWeights(const string& inFile, bool tune, dtype norm = -1) {
+        if (nVSize == 0 || !elems->is_fixed() || (nVSize == 1 && nUNKId >= 0)) {
             std::cout << "please check the alphabet" << std::endl;
             return false;
         }
@@ -75,6 +76,11 @@ class LookupTable {
             inf.clear();
         }
         inf.open(inFile.c_str());
+
+        if (!inf.is_open()) {
+            std::cout << "please check the input file" << std::endl;
+            return false;
+        }
 
         string strLine, curWord;
         int wordId;
@@ -147,21 +153,23 @@ class LookupTable {
             std::cout << unknownkey << " not found, using averaged value to initialize." << std::endl;
         }
 
+
         int oovWords = 0;
         for (int id = 0; id < nVSize; id++) {
             if (indexers.find(id) == indexers.end()) {
                 oovWords++;
                 for (int idy = 0; idy < nDim; idy++) {
-                    E.val[id][idy] = nUNKId >= 0 ? E.val[nUNKId][idy] : sum[idy] / count;
+                    E.val[id][idy] = nUNKId >= 0 ? E.val[nUNKId][idy] : sum[idy] / (count + 1);
                 }
             }
         }
 
+
         std::cout << "OOV num is " << oovWords << ", total num is " << nVSize << ", embedding oov ratio is " << oovWords * 1.0 / nVSize << std::endl;
         std::cout << "unknown id" << nUNKId << std::endl;
         bFineTune = tune;
-        if (normalize) {
-            E.val.norm2one();
+        if (norm > 0) {
+            E.val.norm2one(norm);
         }
         return true;
     }
@@ -236,7 +244,7 @@ class LookupNode : public Node {
     }
 
   public:
-    inline PExecute generate(bool bTrain);
+    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -270,71 +278,36 @@ class LookupNode : public Node {
 };
 
 
-//#if USE_GPU
-//class LookupExecute :public Execute {
-//public:
-//  bool bTrain;
-//public:
-//  inline void  forward() {
-//    int count = batch.size();
-//
-//    for (int idx = 0; idx < count; idx++) {
-//      LookupNode* ptr = (LookupNode*)batch[idx];
-//      ptr->compute();
-//      ptr->forward_drop(bTrain);
-//    }
-//  }
-//
-//  inline void backward() {
-//    int count = batch.size();
-//    for (int idx = 0; idx < count; idx++) {
-//      LookupNode* ptr = (LookupNode*)batch[idx];
-//      ptr->backward_drop();
-//      ptr->backward();
-//    }
-//  }
-//};
-//
-//
-//inline PExecute LookupNode::generate(bool bTrain) {
-//  LookupExecute* exec = new LookupExecute();
-//  exec->batch.push_back(this);
-//  exec->bTrain = bTrain;
-//  return exec;
-//}
-//#else
 class LookupExecute :public Execute {
   public:
     bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
-//#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            LookupNode* ptr = (LookupNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
     inline void backward() {
         int count = batch.size();
-//#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            LookupNode* ptr = (LookupNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
         }
     }
 };
 
 
-inline PExecute LookupNode::generate(bool bTrain) {
+inline PExecute LookupNode::generate(bool bTrain, dtype cur_drop_factor) {
     LookupExecute* exec = new LookupExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
+    exec->drop_factor = cur_drop_factor;
     return exec;
 }
-//#endif
 
 #endif /*_LOOKUPTABLE_H*/

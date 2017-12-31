@@ -112,7 +112,7 @@ class TransferNode : public Node {
     }
 
   public:
-    inline PExecute generate(bool bTrain);
+    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -132,188 +132,37 @@ class TransferNode : public Node {
 
 };
 
-#if USE_GPU
-class TransferExecute :public Execute {
-  public:
-    Tensor2D x, y;
-    int inDim, outDim;
-    int xid;
-    TransferParams* param;
-    bool bTrain;
 
-  public:
-    inline void  forward() {
-        int count = batch.size();
-        x.init(inDim, count);
-        y.init(outDim, count);
-
-        for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->in->val[idy];
-            }
-        }
-
-        if (xid >= 0) {
-            y.mat() = param->W[xid].val.mat() * x.mat();
-        }
-
-        for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
-            }
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        Tensor2D lx, lty, ly;
-        lx.init(inDim, count);
-        lty.init(outDim, count);
-        ly.init(outDim, count);
-
-        for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
-            }
-        }
-
-        if (xid >= 0) {
-            param->W[xid].grad.mat() += ly.mat() * x.mat().transpose();
-            lx.mat() += param->W[xid].val.mat().transpose() * ly.mat();
-        }
-
-        for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
-            }
-        }
-    }
-};
-
-inline PExecute TransferNode::generate(bool bTrain) {
-    TransferExecute* exec = new TransferExecute();
-    exec->batch.push_back(this);
-    exec->inDim = param->nInSize;
-    exec->outDim = param->nOutSize;
-    exec->param = param;
-    exec->xid = xid;
-    exec->bTrain = bTrain;
-    return exec;
-}
-#elif USE_BASE
 class TransferExecute :public Execute {
   public:
     bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
     inline void backward() {
         int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
         }
     }
 };
 
-inline PExecute TransferNode::generate(bool bTrain) {
+inline PExecute TransferNode::generate(bool bTrain, dtype cur_drop_factor) {
     TransferExecute* exec = new TransferExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
-    exec->dim = dim;
+    exec->drop_factor = cur_drop_factor;
     return exec;
 };
 
-#else
-class TransferExecute :public Execute {
-  public:
-    Tensor2D x, y;
-    int inDim, outDim;
-    int xid;
-    TransferParams* param;
-    bool bTrain;
-
-  public:
-    inline void  forward() {
-        int count = batch.size();
-        x.init(inDim, count);
-        y.init(outDim, count);
-
-        for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->in->val[idy];
-            }
-        }
-
-        if (xid >= 0) {
-            y.mat() = param->W[xid].val.mat() * x.mat();
-        }
-
-        for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
-            }
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        if (xid < 0) return;
-        int count = batch.size();
-        Tensor2D lx, ly;
-        lx.init(inDim, count);
-        ly.init(outDim, count);
-
-        for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
-            }
-        }
-
-        if (xid >= 0) {
-            param->W[xid].grad.mat() += ly.mat() * x.mat().transpose();
-            lx.mat() += param->W[xid].val.mat().transpose() * ly.mat();
-        }
-
-        for (int idx = 0; idx < count; idx++) {
-            TransferNode* ptr = (TransferNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
-            }
-        }
-    }
-};
-
-inline PExecute TransferNode::generate(bool bTrain) {
-    TransferExecute* exec = new TransferExecute();
-    exec->batch.push_back(this);
-    exec->inDim = param->nInSize;
-    exec->outDim = param->nOutSize;
-    exec->param = param;
-    exec->xid = xid;
-    exec->bTrain = bTrain;
-    return exec;
-}
-#endif
 
 #endif /* TransferOP_H_ */

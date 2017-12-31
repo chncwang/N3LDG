@@ -1,29 +1,29 @@
 /*
- * APOP.h
+ * SparseOP.h
  *
  *  Created on: Jul 20, 2016
  *      Author: mason
  */
 
-#ifndef APOP_H_
-#define APOP_H_
+#ifndef ACTIONOP_H_
+#define ACTIONOP_H_
 
 #include "MyLib.h"
 #include "Alphabet.h"
 #include "Node.h"
 #include "Graph.h"
-#include "APParam.h"
+#include "SparseParam.h"
 
 // for sparse features
-struct APParams {
+class ActionParams {
   public:
-    APParam W;
+    SparseParam W;
     PAlphabet elems;
     int nVSize;
     int nDim;
 
   public:
-    APParams() {
+    ActionParams() {
         nVSize = 0;
         nDim = 0;
         elems = NULL;
@@ -40,26 +40,19 @@ struct APParams {
         }
         nDim = nOSize;
         W.initial(nOSize, nVSize);
+        W.val.random(0.01);
     }
 
+
     //random initialization
-    inline void initial(PAlphabet alpha, int nOSize, int base = 1) {
-        assert(base >= 1);
+    inline void initial(PAlphabet alpha, int nOSize) {
         elems = alpha;
-        nVSize = base * elems->size();
-        if (base > 1) {
-            std::cout << "nVSize: " << nVSize << ", Alpha Size = " << elems->size()  << ", Require more Alpha."<< std::endl;
-            elems->set_fixed_flag(false);
-        }
+        nVSize =elems->size();
         initialWeights(nOSize);
     }
 
     inline int getFeatureId(const string& strFeat) {
         int idx = elems->from_string(strFeat);
-        if(!elems->m_b_fixed && elems->m_size >= nVSize) {
-            std::cout << "AP Alphabet stopped collecting features" << std::endl;
-            elems->set_fixed_flag(true);
-        }
         return idx;
     }
 
@@ -67,53 +60,69 @@ struct APParams {
 
 //only implemented sparse linear node.
 //non-linear transformations are not support,
-class APNode : public Node {
+class ActionNode : public Node {
   public:
-    APParams* param;
-    vector<int> ins;
-    bool bTrain;
+    ActionParams* param;
+    int actid;
+    PNode in;
+
 
   public:
-    APNode() : Node() {
-        ins.clear();
+    ActionNode() : Node() {
+        actid = -1;
         param = NULL;
-        node_type = "apnode";
+        node_type = "actionnode";
     }
 
-    inline void setParam(APParams* paramInit) {
+    inline void setParam(ActionParams* paramInit) {
         param = paramInit;
+    }
+
+    //can not be dropped since the output is a scalar
+    inline void init(int ndim, dtype dropout) {
+        dim = 1;
+        Node::init(dim, -1);
     }
 
     inline void clearValue() {
         Node::clearValue();
-        ins.clear();
-        bTrain = false;
+        actid = -1;
     }
 
   public:
     //notice the output
-    void forward(Graph *cg, const vector<string>& x) {
-        int featId;
-        int featSize = x.size();
-        for (int idx = 0; idx < featSize; idx++) {
-            featId = param->getFeatureId(x[idx]);
-            if (featId >= 0) {
-                ins.push_back(featId);
-            }
-        }
+    void forward(Graph *cg, const string& ac, PNode x) {
+        actid = param->getFeatureId(ac);
+        in = x;
         degree = 0;
+        in->addParent(this);
         cg->addNode(this);
-        bTrain = cg->train;
     }
+
   public:
     inline void compute() {
-        param->W.value(ins, val, bTrain);
+        if (param->nDim != in->dim) {
+            std::cout << "warning: action dim not equal ." << std::endl;
+        }
+        val[0] = 0;
+        if (actid >= 0) {
+            for (int idx = 0; idx < in->dim; idx++) {
+                val[0] += in->val[idx] * param->W.val[actid][idx];
+            }
+        } else {
+            std::cout << "unknown action" << std::endl;
+        }
     }
 
     //no output losses
     void backward() {
-        //assert(param != NULL);
-        param->W.loss(ins, loss);
+        if (actid >= 0) {
+            for (int idx = 0; idx < in->dim; idx++) {
+                in->loss[idx] += loss[0] * param->W.val[actid][idx];
+                param->W.grad[actid][idx] += loss[0] * in->val[idx];
+            }
+            param->W.indexers[actid] = true;
+        }
     }
 
   public:
@@ -124,7 +133,7 @@ class APNode : public Node {
         bool result = Node::typeEqual(other);
         if (!result) return false;
 
-        APNode* conv_other = (APNode*)other;
+        ActionNode* conv_other = (ActionNode*)other;
         if (param != conv_other->param) {
             return false;
         }
@@ -134,7 +143,8 @@ class APNode : public Node {
 
 };
 
-class APExecute :public Execute {
+
+class ActionExecute :public Execute {
   public:
     bool bTrain;
   public:
@@ -158,12 +168,12 @@ class APExecute :public Execute {
 };
 
 
-inline PExecute APNode::generate(bool bTrain, dtype cur_drop_factor) {
-    APExecute* exec = new APExecute();
+inline PExecute ActionNode::generate(bool bTrain, dtype cur_drop_factor) {
+    ActionExecute* exec = new ActionExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
     return exec;
 }
 
-#endif /* APOP_H_ */
+#endif /* ACTIONOP_H_ */

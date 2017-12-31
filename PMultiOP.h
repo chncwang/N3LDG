@@ -56,207 +56,39 @@ class PMultiNode : public Node {
         return Node::typeEqual(other);
     }
 
-    inline PExecute generate(bool bTrain);
+    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 };
 
-
-#if USE_GPU
-class PMultiExecute :public Execute {
-  public:
-    Tensor1D y, x1, x2;
-    int sumDim;
-    bool bTrain;
-
-  public:
-    inline void  forward() {
-        int count = batch.size();
-        sumDim = 0;
-        for (int idx = 0; idx < count; idx++) {
-            sumDim += batch[idx]->dim;
-        }
-
-        y.init(sumDim);
-        x1.init(sumDim);
-        x2.init(sumDim);
-
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                x1[offset + idy] = ptr->in1->val[idy];
-                x2[offset + idy] = ptr->in2->val[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        y.vec() = x1.vec() * x2.vec();
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->val[idy] = y[offset + idy];
-            }
-            offset += ptr->dim;
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void  backward() {
-        Tensor1D ly, lx1, lx2;
-        ly.init(sumDim);
-        lx1.init(sumDim);
-        lx2.init(sumDim);
-
-        int count = batch.size();
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ly[offset + idy] = ptr->loss[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        lx1.vec() = ly.vec() * x2.vec();
-        lx2.vec() = ly.vec() * x1.vec();
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->in1->loss[idy] += lx1[offset + idy];
-                ptr->in2->loss[idy] += lx2[offset + idy];
-            }
-            offset += ptr->dim;
-        }
-    }
-
-};
-
-inline PExecute PMultiNode::generate(bool bTrain) {
-    PMultiExecute* exec = new PMultiExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-}
-
-#elif USE_BASE
 class PMultiExecute :public Execute {
   public:
     bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            ptr->compute();
-            ptr->forward_drop(bTrain);
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
     inline void backward() {
         int count = batch.size();
-        //#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            ptr->backward_drop();
-            ptr->backward();
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
         }
     }
 };
 
-inline PExecute PMultiNode::generate(bool bTrain) {
+inline PExecute PMultiNode::generate(bool bTrain, dtype cur_drop_factor) {
     PMultiExecute* exec = new PMultiExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
+    exec->drop_factor = cur_drop_factor;
     return exec;
 };
-
-#else
-class PMultiExecute :public Execute {
-  public:
-    Tensor1D y, x1, x2;
-    int sumDim;
-    bool bTrain;
-
-  public:
-    inline void  forward() {
-        int count = batch.size();
-        sumDim = 0;
-        for (int idx = 0; idx < count; idx++) {
-            sumDim += batch[idx]->dim;
-        }
-
-        y.init(sumDim);
-        x1.init(sumDim);
-        x2.init(sumDim);
-
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                x1[offset + idy] = ptr->in1->val[idy];
-                x2[offset + idy] = ptr->in2->val[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        y.vec() = x1.vec() * x2.vec();
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->val[idy] = y[offset + idy];
-            }
-            offset += ptr->dim;
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void  backward() {
-        Tensor1D ly, lx1, lx2;
-        ly.init(sumDim);
-        lx1.init(sumDim);
-        lx2.init(sumDim);
-
-        int count = batch.size();
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ly[offset + idy] = ptr->loss[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        lx1.vec() = ly.vec() * x2.vec();
-        lx2.vec() = ly.vec() * x1.vec();
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            PMultiNode* ptr = (PMultiNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->in1->loss[idy] += lx1[offset + idy];
-                ptr->in2->loss[idy] += lx2[offset + idy];
-            }
-            offset += ptr->dim;
-        }
-    }
-
-};
-
-inline PExecute PMultiNode::generate(bool bTrain) {
-    PMultiExecute* exec = new PMultiExecute();
-    exec->batch.push_back(this);
-    exec->bTrain = bTrain;
-    return exec;
-}
-#endif
 
 
 #endif

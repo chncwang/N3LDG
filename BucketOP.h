@@ -52,8 +52,16 @@ class BucketNode : public Node {
         cg->addNode(this);
     }
 
+    inline void compute() {
+
+    }
+
+    inline void backward() {
+
+    }
+
   public:
-    inline PExecute generate(bool bTrain);
+    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -62,64 +70,33 @@ class BucketNode : public Node {
 
 };
 
-//#if USE_GPU
-//class BucketExecute : public Execute {
-//public:
-//  bool bTrain;
-//public:
-//  inline void  forward() {
-//    int count = batch.size();
-//    for (int idx = 0; idx < count; idx++) {
-//      BucketNode* ptr = (BucketNode*)batch[idx];
-//      ptr->forward_drop(bTrain);
-//    }
-//  }
-//
-//  inline void backward() {
-//    int count = batch.size();
-//    for (int idx = 0; idx < count; idx++) {
-//      BucketNode* ptr = (BucketNode*)batch[idx];
-//      ptr->backward_drop();
-//    }
-//  }
-//};
-//
-//inline PExecute BucketNode::generate(bool bTrain) {
-//  BucketExecute* exec = new BucketExecute();
-//  exec->batch.push_back(this);
-//  exec->bTrain = bTrain;
-//  return exec;
-//}
-//#else
 class BucketExecute : public Execute {
   public:
     bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
-//#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            BucketNode* ptr = (BucketNode*)batch[idx];
-            ptr->forward_drop(bTrain);
+            batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
 
     inline void backward() {
         int count = batch.size();
-//#pragma omp parallel for schedule(static,1)
+        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            BucketNode* ptr = (BucketNode*)batch[idx];
-            ptr->backward_drop();
+            batch[idx]->backward_drop();
         }
     }
 };
 
-inline PExecute BucketNode::generate(bool bTrain) {
+inline PExecute BucketNode::generate(bool bTrain, dtype cur_drop_factor) {
     BucketExecute* exec = new BucketExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
+    exec->drop_factor = cur_drop_factor;
     return exec;
 }
-//#endif
 
 #endif

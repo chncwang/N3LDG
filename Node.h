@@ -76,21 +76,21 @@ class Node {
         parents.clear();
     }
 
-    inline void forward_drop(bool bTrain) {
+    inline void forward_drop(bool bTrain, dtype drop_factor) {
         if (drop_value > 0) {
             if (bTrain) {
-                int dropNum = (int)(dim * drop_value);
+                int dropNum = (int)(dim * drop_value * drop_factor);
                 vector<int> tmp_masks(dim);
                 for (int idx = 0; idx < dim; idx++) {
                     tmp_masks[idx] = idx < dropNum ? 0 : 1;
                 }
                 random_shuffle(tmp_masks.begin(), tmp_masks.end());
                 for (int idx = 0; idx < dim; idx++) {
-                    drop_mask[idx] = tmp_masks[idx];
+                    drop_mask[idx] = 1.0 * tmp_masks[idx];
                 }
                 val.vec() = val.vec() * drop_mask.vec();
             } else {
-                val.vec() = val.vec() * (1 - drop_value);
+                val.vec() = val.vec() * (1 - drop_value * drop_factor);
             }
         }
         degree = -1;
@@ -103,8 +103,10 @@ class Node {
     }
 
   public:
+    virtual inline void compute() = 0;
+    virtual inline void backward() = 0;
 
-    virtual inline Execute* generate(bool bTrain) = 0;
+    virtual inline Execute* generate(bool bTrain, dtype cur_drop_factor) = 0;
 
     virtual inline bool typeEqual(Node* other) {
         if (node_type.compare(other->node_type) == 0) {
@@ -130,6 +132,7 @@ typedef  Node* PNode;
 class Execute {
   public:
     vector<PNode> batch;
+    dtype drop_factor;
 
   public:
     virtual ~Execute() {
