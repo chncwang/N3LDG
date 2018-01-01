@@ -76,7 +76,7 @@ class Param : public BaseParam {
 
     inline dtype squareGradNorm() {
         dtype sumNorm = 0.0;
-        for (int i = 0; i < grad.size; i++) {
+        for (int i = 0; i < grad.size(); i++) {
             sumNorm += grad.v[i] * grad.v[i];
         }
         return sumNorm;

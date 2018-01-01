@@ -15,6 +15,14 @@
 
 #include "MyTensor.h"
 
+#if USE_GPU
+#include "n3ldg_cuda.h"
+using n3ldg_cuda::Tensor1D;
+using n3ldg_cuda::Tensor2D;
+#else
+using n3ldg_cpu::Tensor1D;
+using n3ldg_cpu::Tensor2D;
+#endif
 
 class Execute;
 

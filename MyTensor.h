@@ -8,6 +8,8 @@
 
 using namespace Eigen;
 
+namespace n3ldg_cpu {
+
 struct Tensor1D {
   private:
     size_t memsize;
@@ -68,10 +70,12 @@ struct Tensor1D {
     }
 
     inline dtype& operator[](const int i) {
+        assert(i < dim);
         return v[i];  // no boundary check?
     }
 
     inline const dtype& operator[](const int i) const {
+        assert(i < dim);
         return v[i];  // no boundary check?
     }
 
@@ -185,10 +189,12 @@ struct Tensor2D {
 
     //use it carefully, first col, then row, because rows are allocated successively
     inline dtype* operator[](const int irow) {
+        assert(irow < row);
         return &(v[irow*col]);  // no boundary check?
     }
 
     inline const dtype* operator[](const int irow) const {
+        assert(irow < row);
         return &(v[irow*col]);  // no boundary check?
     }
 
@@ -278,6 +284,7 @@ struct Tensor2D {
     }
 
 };
+}
 
 
 //useful functions
@@ -356,6 +363,7 @@ inline dtype dlog(const dtype& x, const dtype& y) {
     if(x < 0.001) return 1000;
     return 1.0 / x;
 }
+
 
 
 

@@ -8,6 +8,10 @@
 #ifndef BasePARAM_H_
 #define BasePARAM_H_
 
+#if USE_GPU
+#include "n3ldg_cuda.h"
+#endif
+
 #include "MyTensor.h"
 
 struct BaseParam {

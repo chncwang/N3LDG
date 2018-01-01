@@ -106,7 +106,6 @@ class LookupTable {
         nDim = vecInfo.size() - 1;
 
         E.initial(nDim, nVSize);
-        E.val = 0;
 
         std::cout << "word embedding dim is " << nDim << std::endl;
 

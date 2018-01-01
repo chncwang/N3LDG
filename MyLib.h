@@ -19,20 +19,12 @@
 
 #include "NRMat.h"
 #include "Eigen/Dense"
+#include "Def.h"
 
 using namespace nr;
 using namespace std;
 using namespace Eigen;
 
-#if USE_FLOAT
-typedef float dtype;
-typedef Eigen::TensorMap<Eigen::Tensor<float, 1>>  Vec;
-typedef Eigen::Map<Matrix<float, Dynamic, Dynamic, RowMajor> > Mat;
-#else
-typedef double dtype;
-typedef Eigen::TensorMap<Eigen::Tensor<double, 1>>  Vec;
-typedef Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > Mat;
-#endif
 
 typedef long long blong;
 
@@ -756,6 +748,44 @@ inline void addAllItems(vector<A>& target, const vector<A>& sources) {
 inline int cmpStringIntPairByValue(const pair<string, int> &x, const pair<string, int> &y) {
     return x.second > y.second;
 }
+
+
+template <typename T, typename S>
+std::vector<S *> toPointers(std::vector<T> &v, int size) {
+    std::vector<S *> pointers;
+    for (int i = 0; i < size; ++i) {
+        pointers.push_back(&v.at(i));
+    }
+    return pointers;
+}
+
+
+template <typename T, typename S>
+std::vector<S *> toPointers(std::vector<T> &v) {
+    return toPointers<T, S>(v, v.size());
+}
+
+
+// for lowercase English only
+bool isPunctuation(const std::string &text) {
+	for (char c : text) {
+		if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool isEqual(float a, float b) {
+	float c = a - b;
+	return c < 0.001 && c > -0.001;
+}
+
+#define n3ldg_assert(assertion, message) \
+  if (!(assertion)) {\
+    std::cerr << message << endl;\
+    abort(); \
+  }
 
 #endif
 
