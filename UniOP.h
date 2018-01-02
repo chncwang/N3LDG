@@ -276,7 +276,7 @@ class LinearNode : public Node {
     }
 
   public:
-    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -295,24 +295,116 @@ class LinearNode : public Node {
 
 class UniExecute :public Execute {
   public:
+    Tensor2D x, ty, b, y;
+    int inDim, outDim;
+    UniParams* param;
+    dtype(*activate)(const dtype&);   // activation function
+    dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
     bool bTrain;
-  public:
+
     inline void  forward() {
         int count = batch.size();
 
-        //#pragma omp parallel for
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
+        ty.init(outDim, count);
+        x.init(inDim, count);
+        b.init(outDim, count);
+        y.init(outDim, count);
+#if USE_GPU
+        std::vector<dtype*> xs, ys;
+        xs.reserve(batch.size());
+        ys.reserve(batch.size());
+        //param->W.val.copyFromHostToDevice();
+        //param->b.val.copyFromHostToDevice();
+        for (int i = 0; i < batch.size(); ++i) {
+            UniNode *n = static_cast<UniNode*>(batch.at(i));
+            //n->in->val.copyFromHostToDevice();
+            xs.push_back(n->in->val.value);
+            ys.push_back(n->val.value);
         }
+        n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
+                ty.value,
+                count,
+                inDim,
+                outDim);
+        n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
+                ty.value,
+                outDim,
+                inDim,
+                count,
+                param->bUseB);
+        n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
+        for (int i = 0; i<batch.size(); ++i) {
+            UniNode *n = static_cast<UniNode*>(batch.at(i));
+            //n->val.copyFromDeviceToHost();
+        }
+        //x.copyFromDeviceToHost();
+        //y.copyFromDeviceToHost();
+        //ty.copyFromDeviceToHost();
+        //b.copyFromDeviceToHost();
+#else
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            for (int idy = 0; idy < inDim; idy++) {
+                x[idy][idx] = ptr->in->val[idy];
+            }
+            if (param->bUseB) {
+                for (int idy = 0; idy < outDim; idy++) {
+                    b[idy][idx] = param->b.val.v[idy];
+                }
+            }
+        }
+
+        ty.mat() = param->W.val.mat() * x.mat();
+
+        if (param->bUseB) {
+            ty.vec() = ty.vec() + b.vec();
+        }
+
+        y.vec() = ty.vec().unaryExpr(ptr_fun(activate));
+
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            for (int idy = 0; idy < outDim; idy++) {
+                ptr->val[idy] = y[idy][idx];
+            }
+        }
+#endif
     }
 
     inline void backward() {
         int count = batch.size();
-        //#pragma omp parallel for
+        Tensor2D lx, lty, ly;
+        lx.init(inDim, count);
+        lty.init(outDim, count);
+        ly.init(outDim, count);
+
         for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
+            UniNode* ptr = (UniNode*)batch[idx];
+            ptr->backward_drop();
+            for (int idy = 0; idy < outDim; idy++) {
+                ly[idy][idx] = ptr->loss[idy];
+            }
+        }
+
+        lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
+
+        param->W.grad.mat() += lty.mat() * x.mat().transpose();
+
+        if (param->bUseB) {
+            for (int idx = 0; idx < count; idx++) {
+                for (int idy = 0; idy < outDim; idy++) {
+                    param->b.grad.v[idy] += lty[idy][idx];
+                }
+            }
+        }
+
+        lx.mat() += param->W.val.mat().transpose() * lty.mat();
+
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            for (int idy = 0; idy < inDim; idy++) {
+                ptr->in->loss[idy] += lx[idy][idx];
+            }
         }
     }
 };
@@ -322,6 +414,11 @@ inline PExecute UniNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+    exec->inDim = param->W.inDim();
+    exec->outDim = param->W.outDim();
+    exec->param = param;
+    exec->activate = activate;
+    exec->derivate = derivate;
     return exec;
 };
 
