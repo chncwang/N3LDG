@@ -313,8 +313,8 @@ class UniExecute :public Execute {
         std::vector<dtype*> xs, ys;
         xs.reserve(batch.size());
         ys.reserve(batch.size());
-        //param->W.val.copyFromHostToDevice();
-        //param->b.val.copyFromHostToDevice();
+        param->W.val.copyFromHostToDevice();
+        param->b.val.copyFromHostToDevice();
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
             //n->in->val.copyFromHostToDevice();
@@ -335,12 +335,12 @@ class UniExecute :public Execute {
         n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
-            //n->val.copyFromDeviceToHost();
+            n->val.copyFromDeviceToHost();
         }
-        //x.copyFromDeviceToHost();
-        //y.copyFromDeviceToHost();
-        //ty.copyFromDeviceToHost();
-        //b.copyFromDeviceToHost();
+        x.copyFromDeviceToHost();
+        y.copyFromDeviceToHost();
+        ty.copyFromDeviceToHost();
+        b.copyFromDeviceToHost();
 #else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
