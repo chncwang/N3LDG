@@ -317,7 +317,7 @@ class UniExecute :public Execute {
         param->b.val.copyFromHostToDevice();
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
-            //n->in->val.copyFromHostToDevice();
+            n->in->val.copyFromHostToDevice();
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
         }
