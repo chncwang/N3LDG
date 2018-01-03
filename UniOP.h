@@ -15,6 +15,7 @@
 #include "Node.h"
 #include "Graph.h"
 #include "ModelUpdate.h"
+#include "profiler.h"
 
 class UniParams {
   public:
@@ -303,44 +304,67 @@ class UniExecute :public Execute {
     bool bTrain;
 
     inline void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("forward");
         int count = batch.size();
 
+        profiler.BeginEvent("init");
         ty.init(outDim, count);
         x.init(inDim, count);
         b.init(outDim, count);
         y.init(outDim, count);
+        profiler.EndCudaEvent();
 #if USE_GPU
+        profiler.BeginEvent("prepare vectors");
         std::vector<dtype*> xs, ys;
         xs.reserve(batch.size());
         ys.reserve(batch.size());
+        profiler.BeginEvent("copy between device and host");
         param->W.val.copyFromHostToDevice();
         param->b.val.copyFromHostToDevice();
+        profiler.EndCudaEvent();
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
+            profiler.BeginEvent("copy between device and host");
             n->in->val.copyFromHostToDevice();
+            profiler.EndCudaEvent();
+            profiler.BeginEvent("vector push_back");
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
+            profiler.EndEvent();
         }
+        profiler.EndEvent();
+
+        profiler.BeginEvent("CopyForUniNodeForward");
         n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
                 ty.value,
                 count,
                 inDim,
                 outDim);
+        profiler.EndCudaEvent();
+        profiler.BeginEvent("MatrixMultiplyMatrix");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
                 ty.value,
                 outDim,
                 inDim,
                 count,
                 param->bUseB);
+        profiler.EndCudaEvent();
+        profiler.BeginEvent("Tanh");
         n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
+        profiler.EndCudaEvent();
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
+            profiler.BeginEvent("copy between device and host");
             n->val.copyFromDeviceToHost();
+            profiler.EndCudaEvent();
         }
+        profiler.BeginEvent("copy between device and host");
         x.copyFromDeviceToHost();
         y.copyFromDeviceToHost();
         ty.copyFromDeviceToHost();
         b.copyFromDeviceToHost();
+        profiler.EndCudaEvent();
 #else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -369,6 +393,7 @@ class UniExecute :public Execute {
             }
         }
 #endif
+        profiler.EndCudaEvent();
     }
 
     inline void backward() {
