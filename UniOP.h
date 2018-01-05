@@ -314,10 +314,10 @@ class UniExecute :public Execute {
         y.init(outDim, count);
 #if USE_GPU
         profiler.EndCudaEvent();
-#else
+//#else
         Tensor2D b;
         b.init(outDim, count);
-        profiler.EndEvent();
+//        profiler.EndEvent();
 #endif
 
 #if USE_GPU
@@ -374,12 +374,9 @@ class UniExecute :public Execute {
         }
 
         profiler.BeginEvent("copy between device and host");
-        x.copyFromDeviceToHost();
-        x.verify();
-        y.copyFromDeviceToHost();
-        y.verify();
-        ty.copyFromDeviceToHost();
-        ty.verify();
+        //x.copyFromDeviceToHost();
+        //y.copyFromDeviceToHost();
+        //ty.copyFromDeviceToHost();
         profiler.EndCudaEvent();
 
         profiler.EndCudaEvent();
@@ -410,30 +407,36 @@ class UniExecute :public Execute {
                 ptr->val[idy] = y[idy][idx];
             }
         }
+
+        //x.verify();
+        //y.verify();
+        //ty.verify();
         profiler.EndEvent();
 #endif
     }
 
     void backward() {
         int count = batch.size();
-#if USE_GPU
-        Tensor2D lx, lty;
-        lx.init(inDim, count);
-        lty.init(outDim, count);
-
-        std::vector<dtype*> ly;
-        ly.reserve(count);
-        for (int i = 0; i < count; ++i) {
-            UniNode* ptr = (UniNode*)batch[idx];
-            ly.push_back(ptr);
-        }
-
-        n3ldg_cuda::LtyForUniBackward(ly, ty, y, lty, count, outDim);
-#else
         Tensor2D lx, lty, ly;
         lx.init(inDim, count);
         lty.init(outDim, count);
         ly.init(outDim, count);
+
+#if USE_GPU
+        std::vector<dtype*> ly_vec;
+        ly_vec.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            UniNode* ptr = (UniNode*)batch[i];
+            ptr->loss.copyFromHostToDevice();
+            ly_vec.push_back(ptr->loss.value);
+        }
+
+        n3ldg_cuda::LtyForUniBackward(ly_vec, ty.value, y.value, lty.value,
+                count, outDim);
+        n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
+                param->W.grad.value, outDim, inDim, count, true, true);
+
+//#else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             ptr->backward_drop();
