@@ -121,6 +121,7 @@ class Graph {
             //execute
             //#pragma omp parallel for
             for (int idy = 0; idy < cur_execs_size; idy++) {
+                //std::cout << "batch size:" << cur_execs.at(idy)->batch.size() << std::endl;
                 cur_execs[idy]->forward();
             }
 
@@ -134,6 +135,7 @@ class Graph {
                 finish_nodes.push_back(free_nodes[idx]);
                 int parent_count = free_nodes[idx]->parents.size();
                 for (int idy = 0; idy < parent_count; idy++) {
+                    assert(free_nodes[idx]->parents[idy]->degree > 0);
                     free_nodes[idx]->parents[idy]->degree--;
                     if (free_nodes[idx]->parents[idy]->degree == 0) {
                         new_free_nodes.push_back(free_nodes[idx]->parents[idy]);
@@ -162,6 +164,7 @@ class Graph {
                 }
             }
             std::cout << "unprocessed: " << unprocessed << std::endl;
+            abort();
         }
     }
 

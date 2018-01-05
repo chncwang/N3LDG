@@ -296,7 +296,7 @@ class LinearNode : public Node {
 
 class UniExecute :public Execute {
   public:
-    Tensor2D x, ty, b, y;
+    Tensor2D x, ty, y;
     int inDim, outDim;
     UniParams* param;
     dtype(*activate)(const dtype&);   // activation function
@@ -311,29 +311,37 @@ class UniExecute :public Execute {
         profiler.BeginEvent("init");
         ty.init(outDim, count);
         x.init(inDim, count);
-        b.init(outDim, count);
         y.init(outDim, count);
-        profiler.EndCudaEvent();
 #if USE_GPU
-        profiler.BeginEvent("prepare vectors");
+        profiler.EndCudaEvent();
+#else
+        Tensor2D b;
+        b.init(outDim, count);
+        profiler.EndEvent();
+#endif
+
+#if USE_GPU
         std::vector<dtype*> xs, ys;
         xs.reserve(batch.size());
         ys.reserve(batch.size());
+
         profiler.BeginEvent("copy between device and host");
         param->W.val.copyFromHostToDevice();
         param->b.val.copyFromHostToDevice();
         profiler.EndCudaEvent();
+
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
+
             profiler.BeginEvent("copy between device and host");
             n->in->val.copyFromHostToDevice();
             profiler.EndCudaEvent();
+
             profiler.BeginEvent("vector push_back");
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
             profiler.EndEvent();
         }
-        profiler.EndEvent();
 
         profiler.BeginEvent("CopyForUniNodeForward");
         n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
@@ -342,6 +350,7 @@ class UniExecute :public Execute {
                 inDim,
                 outDim);
         profiler.EndCudaEvent();
+
         profiler.BeginEvent("MatrixMultiplyMatrix");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
                 ty.value,
@@ -350,20 +359,29 @@ class UniExecute :public Execute {
                 count,
                 param->bUseB);
         profiler.EndCudaEvent();
+
         profiler.BeginEvent("Tanh");
         n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
         profiler.EndCudaEvent();
+
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
+
             profiler.BeginEvent("copy between device and host");
             n->val.copyFromDeviceToHost();
+            n->val.verify();
             profiler.EndCudaEvent();
         }
+
         profiler.BeginEvent("copy between device and host");
         x.copyFromDeviceToHost();
+        x.verify();
         y.copyFromDeviceToHost();
+        y.verify();
         ty.copyFromDeviceToHost();
-        b.copyFromDeviceToHost();
+        ty.verify();
+        profiler.EndCudaEvent();
+
         profiler.EndCudaEvent();
 #else
         for (int idx = 0; idx < count; idx++) {
@@ -392,17 +410,30 @@ class UniExecute :public Execute {
                 ptr->val[idy] = y[idy][idx];
             }
         }
+        profiler.EndEvent();
 #endif
-        profiler.EndCudaEvent();
     }
 
-    inline void backward() {
+    void backward() {
         int count = batch.size();
+#if USE_GPU
+        Tensor2D lx, lty;
+        lx.init(inDim, count);
+        lty.init(outDim, count);
+
+        std::vector<dtype*> ly;
+        ly.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            ly.push_back(ptr);
+        }
+
+        n3ldg_cuda::LtyForUniBackward(ly, ty, y, lty, count, outDim);
+#else
         Tensor2D lx, lty, ly;
         lx.init(inDim, count);
         lty.init(outDim, count);
         ly.init(outDim, count);
-
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             ptr->backward_drop();
@@ -431,6 +462,7 @@ class UniExecute :public Execute {
                 ptr->in->loss[idy] += lx[idy][idx];
             }
         }
+#endif
     }
 };
 
