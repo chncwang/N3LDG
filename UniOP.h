@@ -305,16 +305,16 @@ class UniExecute :public Execute {
 
     inline void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("forward");
+//        profiler.BeginEvent("forward");
         int count = batch.size();
 
-        profiler.BeginEvent("init");
+//        profiler.BeginEvent("init");
         ty.init(outDim, count);
         x.init(inDim, count);
         y.init(outDim, count);
 #if USE_GPU
-        profiler.EndCudaEvent();
-//#else
+//        profiler.EndCudaEvent();
+#else
         Tensor2D b;
         b.init(outDim, count);
 //        profiler.EndEvent();
@@ -325,61 +325,60 @@ class UniExecute :public Execute {
         xs.reserve(batch.size());
         ys.reserve(batch.size());
 
-        profiler.BeginEvent("copy between device and host");
-        param->W.val.copyFromHostToDevice();
-        param->b.val.copyFromHostToDevice();
-        profiler.EndCudaEvent();
+//        profiler.BeginEvent("copy between device and host");
+//        param->W.val.copyFromHostToDevice();
+//        param->b.val.copyFromHostToDevice();
+//        profiler.EndCudaEvent();
 
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
 
-            profiler.BeginEvent("copy between device and host");
-            n->in->val.copyFromHostToDevice();
-            profiler.EndCudaEvent();
+//            profiler.BeginEvent("copy between device and host");
+            //n->in->val.copyFromHostToDevice();
+//            profiler.EndCudaEvent();
 
-            profiler.BeginEvent("vector push_back");
+//            profiler.BeginEvent("vector push_back");
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
-            profiler.EndEvent();
+//            profiler.EndEvent();
         }
 
-        profiler.BeginEvent("CopyForUniNodeForward");
+//        profiler.BeginEvent("CopyForUniNodeForward");
         n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
                 ty.value,
                 count,
                 inDim,
                 outDim);
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
 
-        profiler.BeginEvent("MatrixMultiplyMatrix");
+//        profiler.BeginEvent("MatrixMultiplyMatrix");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
                 ty.value,
                 outDim,
                 inDim,
                 count,
                 param->bUseB);
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
 
-        profiler.BeginEvent("Tanh");
+//        profiler.BeginEvent("Tanh");
         n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
 
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
 
-            profiler.BeginEvent("copy between device and host");
-            n->val.copyFromDeviceToHost();
-            n->val.verify();
-            profiler.EndCudaEvent();
+//            profiler.BeginEvent("copy between device and host");
+//            n->val.copyFromDeviceToHost();
+//            profiler.EndCudaEvent();
         }
 
-        profiler.BeginEvent("copy between device and host");
+//        profiler.BeginEvent("copy between device and host");
         //x.copyFromDeviceToHost();
         //y.copyFromDeviceToHost();
         //ty.copyFromDeviceToHost();
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
 
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
 #else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -408,14 +407,16 @@ class UniExecute :public Execute {
             }
         }
 
-        //x.verify();
-        //y.verify();
-        //ty.verify();
-        profiler.EndEvent();
+//        x.verify();
+//        ty.verify();
+//        y.verify();
+//        profiler.EndEvent();
 #endif
     }
 
     void backward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("backward");
         int count = batch.size();
         Tensor2D lx, lty, ly;
         lx.init(inDim, count);
@@ -427,16 +428,40 @@ class UniExecute :public Execute {
         ly_vec.reserve(count);
         for (int i = 0; i < count; ++i) {
             UniNode* ptr = (UniNode*)batch[i];
-            ptr->loss.copyFromHostToDevice();
+            //ptr->loss.copyFromHostToDevice();
             ly_vec.push_back(ptr->loss.value);
         }
 
-        n3ldg_cuda::LtyForUniBackward(ly_vec, ty.value, y.value, lty.value,
-                count, outDim);
+        profiler.BeginEvent("cal lty");
+        n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value,
+                y.value, lty.value, count, outDim);
+        profiler.EndCudaEvent();
+        //param->W.grad.copyFromHostToDevice();
+        profiler.BeginEvent("cal W grad");
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
-                param->W.grad.value, outDim, inDim, count, true, true);
+                param->W.grad.value, outDim, count, inDim, true, true, false);
+        profiler.EndCudaEvent();
+//        param->W.val.copyFromHostToDevice();
+        profiler.BeginEvent("cal lx");
+        n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
+                lx.value, inDim, outDim, count, false, false, true);
+        profiler.EndCudaEvent();
+        std::vector<dtype*> losses;
+        losses.reserve(count);
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+//            ptr->in->loss.copyFromHostToDevice();
+            losses.push_back(ptr->in->loss.value);
+        }
 
-//#else
+        //param->b.grad.copyFromHostToDevice();
+        profiler.BeginEvent("add bias and losses");
+        n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
+                lty.value, lx.value, param->b.grad.value, losses, count,
+                outDim, inDim);
+        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
+#else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             ptr->backward_drop();
@@ -446,8 +471,11 @@ class UniExecute :public Execute {
         }
 
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
+        //lty.verify();
+        //x.verify();
 
         param->W.grad.mat() += lty.mat() * x.mat().transpose();
+        //param->W.grad.verify();
 
         if (param->bUseB) {
             for (int idx = 0; idx < count; idx++) {
@@ -456,8 +484,10 @@ class UniExecute :public Execute {
                 }
             }
         }
+        //param->b.grad.verify();
 
         lx.mat() += param->W.val.mat().transpose() * lty.mat();
+        //lx.verify();
 
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -465,6 +495,12 @@ class UniExecute :public Execute {
                 ptr->in->loss[idy] += lx[idy][idx];
             }
         }
+
+//        for (Node * n : batch) {
+//            UniNode *ptr = static_cast<UniNode *>(n);
+//            ptr->in->loss.verify();
+//        }
+        profiler.EndEvent();
 #endif
     }
 };
