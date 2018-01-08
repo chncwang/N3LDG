@@ -305,7 +305,7 @@ class UniExecute :public Execute {
 
     inline void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("forward");
+        profiler.BeginEvent("forward");
         int count = batch.size();
 
 //        profiler.BeginEvent("init");
@@ -378,7 +378,7 @@ class UniExecute :public Execute {
         //ty.copyFromDeviceToHost();
 //        profiler.EndCudaEvent();
 
-//        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
 #else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -410,13 +410,13 @@ class UniExecute :public Execute {
 //        x.verify();
 //        ty.verify();
 //        y.verify();
-//        profiler.EndEvent();
+        profiler.EndEvent();
 #endif
     }
 
     void backward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("backward");
+//        profiler.BeginEvent("backward");
         int count = batch.size();
         Tensor2D lx, lty, ly;
         lx.init(inDim, count);
@@ -432,20 +432,24 @@ class UniExecute :public Execute {
             ly_vec.push_back(ptr->loss.value);
         }
 
-        profiler.BeginEvent("cal lty");
+//        profiler.BeginEvent("cal lty");
         n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value,
                 y.value, lty.value, count, outDim);
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
+//        profiler.BeginEvent("copy");
         //param->W.grad.copyFromHostToDevice();
-        profiler.BeginEvent("cal W grad");
+//        profiler.EndCudaEvent();
+//        profiler.BeginEvent("cal W grad");
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
-        profiler.EndCudaEvent();
-//        param->W.val.copyFromHostToDevice();
-        profiler.BeginEvent("cal lx");
+//        profiler.EndCudaEvent();
+//        profiler.BeginEvent("copy");
+        //param->W.val.copyFromHostToDevice();
+//        profiler.EndCudaEvent();
+//        profiler.BeginEvent("cal lx");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
                 lx.value, inDim, outDim, count, false, false, true);
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
         std::vector<dtype*> losses;
         losses.reserve(count);
         for (int idx = 0; idx < count; idx++) {
@@ -454,13 +458,15 @@ class UniExecute :public Execute {
             losses.push_back(ptr->in->loss.value);
         }
 
+//        profiler.BeginEvent("copy");
         //param->b.grad.copyFromHostToDevice();
-        profiler.BeginEvent("add bias and losses");
+//        profiler.EndCudaEvent();
+//        profiler.BeginEvent("add bias and losses");
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 lty.value, lx.value, param->b.grad.value, losses, count,
                 outDim, inDim);
-        profiler.EndCudaEvent();
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
 #else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -500,7 +506,7 @@ class UniExecute :public Execute {
 //            UniNode *ptr = static_cast<UniNode *>(n);
 //            ptr->in->loss.verify();
 //        }
-        profiler.EndEvent();
+//        profiler.EndEvent();
 #endif
     }
 };
