@@ -154,6 +154,9 @@ class UniNode : public Node {
         if (activate != conv_other->activate || derivate != conv_other->derivate) {
             return false;
         }
+        if (!isEqual(drop_value, other->drop_value)) {
+            return false;
+        }
 
         return true;
     }
@@ -301,6 +304,7 @@ class UniExecute :public Execute {
     UniParams* param;
     dtype(*activate)(const dtype&);   // activation function
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
+    Tensor2D drop_mask;
     bool bTrain;
 
     inline void  forward() {
@@ -312,6 +316,7 @@ class UniExecute :public Execute {
         ty.init(outDim, count);
         x.init(inDim, count);
         y.init(outDim, count);
+        drop_mask.init(outDim, count);
 #if USE_GPU
 //        profiler.EndCudaEvent();
 #else
@@ -359,6 +364,11 @@ class UniExecute :public Execute {
                 count,
                 param->bUseB);
 //        profiler.EndCudaEvent();
+
+        profiler.BeginEvent("dropout mask");
+        n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
+                drop_mask.value);
+        profiler.EndCudaEvent();
 
 //        profiler.BeginEvent("Tanh");
         n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
@@ -502,6 +512,14 @@ class UniExecute :public Execute {
             }
         }
 
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            for (int idy = 0; idy < outDim; idy++) {
+                ptr->val[idy] = y[idx][idy];
+            }
+            ptr->forward_drop(bTrain, drop_factor);
+        }
+
 //        for (Node * n : batch) {
 //            UniNode *ptr = static_cast<UniNode *>(n);
 //            ptr->in->loss.verify();
@@ -521,6 +539,7 @@ inline PExecute UniNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->param = param;
     exec->activate = activate;
     exec->derivate = derivate;
+    exec->drop_factor = cur_drop_factor * drop_value;
     return exec;
 };
 
