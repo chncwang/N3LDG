@@ -366,12 +366,15 @@ class UniExecute :public Execute {
 //        profiler.EndCudaEvent();
 
         profiler.BeginEvent("dropout mask");
-        n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
-                drop_mask.value);
+        if (bTrain) {
+            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
+                    drop_mask.value);
+        }
         profiler.EndCudaEvent();
 
 //        profiler.BeginEvent("Tanh");
-        n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
+        n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim, bTrain, drop_factor,
+                drop_mask.value);
 //        profiler.EndCudaEvent();
 
         for (int i = 0; i<batch.size(); ++i) {
@@ -415,6 +418,10 @@ class UniExecute :public Execute {
             for (int idy = 0; idy < outDim; idy++) {
                 ptr->val[idy] = y[idy][idx];
             }
+        }
+
+        for (int i = 0; i < count; ++i) {
+            batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
         }
 
 //        x.verify();
@@ -515,7 +522,7 @@ class UniExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
+                ptr->val[idy] = y[idy][idx];
             }
             ptr->forward_drop(bTrain, drop_factor);
         }

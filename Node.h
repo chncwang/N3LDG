@@ -83,18 +83,22 @@ class Node {
         parents.clear();
     }
 
+    void generate_dropmask(dtype drop_factor) {
+        int dropNum = (int)(dim * drop_value * drop_factor);
+        vector<int> tmp_masks(dim);
+        for (int idx = 0; idx < dim; idx++) {
+            tmp_masks[idx] = idx < dropNum ? 0 : 1;
+        }
+        random_shuffle(tmp_masks.begin(), tmp_masks.end());
+        for (int idx = 0; idx < dim; idx++) {
+            drop_mask[idx] = 1.0 * tmp_masks[idx];
+        }
+    }
+
     inline void forward_drop(bool bTrain, dtype drop_factor) {
         if (drop_value > 0) {
             if (bTrain) {
-                int dropNum = (int)(dim * drop_value * drop_factor);
-                vector<int> tmp_masks(dim);
-                for (int idx = 0; idx < dim; idx++) {
-                    tmp_masks[idx] = idx < dropNum ? 0 : 1;
-                }
-                random_shuffle(tmp_masks.begin(), tmp_masks.end());
-                for (int idx = 0; idx < dim; idx++) {
-                    drop_mask[idx] = 1.0 * tmp_masks[idx];
-                }
+                generate_dropmask(drop_factor);
                 val.vec() = val.vec() * drop_mask.vec();
             } else {
                 val.vec() = val.vec() * (1 - drop_value * drop_factor);
