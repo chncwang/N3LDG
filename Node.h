@@ -83,7 +83,7 @@ class Node {
         parents.clear();
     }
 
-    void generate_dropmask(dtype drop_factor) {
+    virtual void generate_dropmask(dtype drop_factor) {
         int dropNum = (int)(dim * drop_value * drop_factor);
         vector<int> tmp_masks(dim);
         for (int idx = 0; idx < dim; idx++) {
@@ -95,10 +95,12 @@ class Node {
         }
     }
 
-    inline void forward_drop(bool bTrain, dtype drop_factor) {
+    void forward_drop(bool bTrain, dtype drop_factor) {
         if (drop_value > 0) {
             if (bTrain) {
+#if !TEST_CUDA
                 generate_dropmask(drop_factor);
+#endif
                 val.vec() = val.vec() * drop_mask.vec();
             } else {
                 val.vec() = val.vec() * (1 - drop_value * drop_factor);

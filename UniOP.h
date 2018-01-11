@@ -16,6 +16,7 @@
 #include "Graph.h"
 #include "ModelUpdate.h"
 #include "profiler.h"
+#include <cstdlib>
 
 class UniParams {
   public:
@@ -113,7 +114,6 @@ class UniNode : public Node {
         derivate = f_deri;
     }
 
-  public:
     void forward(Graph *cg, PNode x) {
         in = x;
         degree = 0;
@@ -121,7 +121,6 @@ class UniNode : public Node {
         cg->addNode(this);
     }
 
-  public:
     inline void compute() {
         ty.mat() = param->W.val.mat() * in->val.mat();
         if (param->bUseB) {
@@ -139,7 +138,6 @@ class UniNode : public Node {
         in->loss.mat() += param->W.val.mat().transpose() * lty.mat();
     }
 
-  public:
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
@@ -319,6 +317,10 @@ class UniExecute :public Execute {
         drop_mask.init(outDim, count);
 #if USE_GPU
 //        profiler.EndCudaEvent();
+#if TEST_CUDA
+        Tensor2D b;
+        b.init(outDim, count);
+#endif
 #else
         Tensor2D b;
         b.init(outDim, count);
@@ -331,15 +333,15 @@ class UniExecute :public Execute {
         ys.reserve(batch.size());
 
 //        profiler.BeginEvent("copy between device and host");
-//        param->W.val.copyFromHostToDevice();
-//        param->b.val.copyFromHostToDevice();
+        param->W.val.copyFromHostToDevice();
+        param->b.val.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
 
 //            profiler.BeginEvent("copy between device and host");
-            //n->in->val.copyFromHostToDevice();
+            n->in->val.copyFromHostToDevice();
 //            profiler.EndCudaEvent();
 
 //            profiler.BeginEvent("vector push_back");
@@ -386,12 +388,58 @@ class UniExecute :public Execute {
         }
 
 //        profiler.BeginEvent("copy between device and host");
-        //x.copyFromDeviceToHost();
-        //y.copyFromDeviceToHost();
-        //ty.copyFromDeviceToHost();
+//        x.copyFromDeviceToHost();
+//        y.copyFromDeviceToHost();
+//        ty.copyFromDeviceToHost();
 //        profiler.EndCudaEvent();
 
         profiler.EndCudaEvent();
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            for (int idy = 0; idy < inDim; idy++) {
+                x[idy][idx] = ptr->in->val[idy];
+            }
+            if (param->bUseB) {
+                for (int idy = 0; idy < outDim; idy++) {
+                    b[idy][idx] = param->b.val.v[idy];
+                }
+            }
+        }
+
+        ty.mat() = param->W.val.mat() * x.mat();
+
+        if (param->bUseB) {
+            ty.vec() = ty.vec() + b.vec();
+        }
+
+        y.vec() = ty.vec().unaryExpr(ptr_fun(activate));
+
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            for (int idy = 0; idy < outDim; idy++) {
+                ptr->val[idy] = y[idy][idx];
+            }
+        }
+
+        drop_mask.copyFromDeviceToHost();
+        for (int i = 0; i < count; ++i) {
+            for (int j = 0; j < outDim; ++j) {
+                dtype v = drop_mask[j][i];
+                batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+            }
+        }
+        for (int i = 0; i < count; ++i) {
+            dtype drop_value = batch[0]->drop_value;
+            batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
+            batch[i]->val.verify();
+        }
+
+        x.verify();
+        ty.verify();
+        y.verify();
+        std::cout << "verify finish" << std::endl;
+#endif
 #else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -421,12 +469,16 @@ class UniExecute :public Execute {
         }
 
         for (int i = 0; i < count; ++i) {
+            for (int j = 0; j < outDim; ++j) {
+                dtype v = drop_mask[j][i];
+                batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+            }
+        }
+        for (int i = 0; i < count; ++i) {
+            dtype drop_value = batch[0]->drop_value;
             batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
         }
 
-//        x.verify();
-//        ty.verify();
-//        y.verify();
         profiler.EndEvent();
 #endif
     }
@@ -517,14 +569,6 @@ class UniExecute :public Execute {
             for (int idy = 0; idy < inDim; idy++) {
                 ptr->in->loss[idy] += lx[idy][idx];
             }
-        }
-
-        for (int idx = 0; idx < count; idx++) {
-            UniNode* ptr = (UniNode*)batch[idx];
-            for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idy][idx];
-            }
-            ptr->forward_drop(bTrain, drop_factor);
         }
 
 //        for (Node * n : batch) {
