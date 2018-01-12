@@ -499,9 +499,6 @@ class UniExecute :public Execute {
             ptr->loss.copyFromHostToDevice();
             ly_vec.push_back(ptr->loss.value);
         }
-        y.copyFromHostToDevice();
-        ty.copyFromHostToDevice();
-
 //        profiler.BeginEvent("cal lty");
         n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value, y.value,
                 drop_mask.value, drop_factor, lty.value, count, outDim);
@@ -542,19 +539,13 @@ class UniExecute :public Execute {
             UniNode* ptr = (UniNode*)batch[idx];
             ptr->backward_drop();
             for (int idy = 0; idy < outDim; idy++) {
-                ptr->loss.copyFromDeviceToHost();
                 ly[idy][idx] = ptr->loss[idy];
             }
         }
 
-        x.verify("backward x");
+        assert(x.verify("backward x"));
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
-        if (!lty.verify("backward lty")) {
-            std::cout << "ly:" << ly[69][1] << " ty:" << ty[69][1] << " lty:" <<
-                lty[69][1] << std::endl;
-            abort();
-        }
-        lty.copyFromDeviceToHost();
+        assert(lty.verify("backward lty"));
 
         param->W.grad.mat() += lty.mat() * x.mat().transpose();
         param->W.grad.verify("backward W grad");
