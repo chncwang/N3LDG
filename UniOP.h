@@ -432,13 +432,12 @@ class UniExecute :public Execute {
         for (int i = 0; i < count; ++i) {
             dtype drop_value = batch[0]->drop_value;
             batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
-            batch[i]->val.verify();
+            batch[i]->val.verify("forward batch i val");
         }
 
-        x.verify();
-        ty.verify();
-        y.verify();
-        std::cout << "verify finish" << std::endl;
+        x.verify("forward x");
+        ty.verify("forward ty");
+        y.verify("forward y");
 #endif
 #else
         for (int idx = 0; idx < count; idx++) {
@@ -497,23 +496,25 @@ class UniExecute :public Execute {
         ly_vec.reserve(count);
         for (int i = 0; i < count; ++i) {
             UniNode* ptr = (UniNode*)batch[i];
-            //ptr->loss.copyFromHostToDevice();
+            ptr->loss.copyFromHostToDevice();
             ly_vec.push_back(ptr->loss.value);
         }
+        y.copyFromHostToDevice();
+        ty.copyFromHostToDevice();
 
 //        profiler.BeginEvent("cal lty");
-        n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value,
-                y.value, lty.value, count, outDim);
+        n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value, y.value,
+                drop_mask.value, drop_factor, lty.value, count, outDim);
 //        profiler.EndCudaEvent();
 //        profiler.BeginEvent("copy");
-        //param->W.grad.copyFromHostToDevice();
+        param->W.grad.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 //        profiler.BeginEvent("cal W grad");
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
 //        profiler.EndCudaEvent();
 //        profiler.BeginEvent("copy");
-        //param->W.val.copyFromHostToDevice();
+//        param->W.val.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 //        profiler.BeginEvent("cal lx");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
@@ -523,12 +524,12 @@ class UniExecute :public Execute {
         losses.reserve(count);
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
-//            ptr->in->loss.copyFromHostToDevice();
+            ptr->in->loss.copyFromHostToDevice();
             losses.push_back(ptr->in->loss.value);
         }
 
 //        profiler.BeginEvent("copy");
-        //param->b.grad.copyFromHostToDevice();
+        param->b.grad.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 //        profiler.BeginEvent("add bias and losses");
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
@@ -536,6 +537,52 @@ class UniExecute :public Execute {
                 outDim, inDim);
 //        profiler.EndCudaEvent();
 //        profiler.EndCudaEvent();
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            ptr->backward_drop();
+            for (int idy = 0; idy < outDim; idy++) {
+                ptr->loss.copyFromDeviceToHost();
+                ly[idy][idx] = ptr->loss[idy];
+            }
+        }
+
+        x.verify("backward x");
+        lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
+        if (!lty.verify("backward lty")) {
+            std::cout << "ly:" << ly[69][1] << " ty:" << ty[69][1] << " lty:" <<
+                lty[69][1] << std::endl;
+            abort();
+        }
+        lty.copyFromDeviceToHost();
+
+        param->W.grad.mat() += lty.mat() * x.mat().transpose();
+        param->W.grad.verify("backward W grad");
+
+        if (param->bUseB) {
+            for (int idx = 0; idx < count; idx++) {
+                for (int idy = 0; idy < outDim; idy++) {
+                    param->b.grad.v[idy] += lty[idy][idx];
+                }
+            }
+        }
+        param->b.grad.verify("backward b grad");
+
+        lx.mat() += param->W.val.mat().transpose() * lty.mat();
+        lx.verify("backward lx");
+
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            for (int idy = 0; idy < inDim; idy++) {
+                ptr->in->loss[idy] += lx[idy][idx];
+            }
+        }
+
+        for (Node * n : batch) {
+            UniNode *ptr = static_cast<UniNode *>(n);
+            ptr->in->loss.verify("backward loss");
+        }
+#endif
 #else
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -546,11 +593,7 @@ class UniExecute :public Execute {
         }
 
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
-        //lty.verify();
-        //x.verify();
-
         param->W.grad.mat() += lty.mat() * x.mat().transpose();
-        //param->W.grad.verify();
 
         if (param->bUseB) {
             for (int idx = 0; idx < count; idx++) {
@@ -559,10 +602,8 @@ class UniExecute :public Execute {
                 }
             }
         }
-        //param->b.grad.verify();
 
         lx.mat() += param->W.val.mat().transpose() * lty.mat();
-        //lx.verify();
 
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -571,11 +612,7 @@ class UniExecute :public Execute {
             }
         }
 
-//        for (Node * n : batch) {
-//            UniNode *ptr = static_cast<UniNode *>(n);
-//            ptr->in->loss.verify();
-//        }
-//        profiler.EndEvent();
+        profiler.EndEvent();
 #endif
     }
 };
