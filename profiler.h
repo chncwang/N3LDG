@@ -34,6 +34,11 @@ struct Elapsed {
     std::string name;
 };
 
+enum ProfilerMode {
+    ANALYSIS = 0,
+    METRIC = 1
+};
+
 class Profiler {
 public:
     static Profiler &Ins() {
@@ -45,31 +50,40 @@ public:
     }
 
     void BeginEvent(const std::string &name) {
-        Elapsed elapsed;
-        elapsed.name = name;
-        running_events_.push(std::move(elapsed));
-        running_events_.top().begin = std::chrono::high_resolution_clock::now();
+        if (enabled_) {
+            Elapsed elapsed;
+            elapsed.name = name;
+            running_events_.push(std::move(elapsed));
+            running_events_.top().begin =
+                std::chrono::high_resolution_clock::now();
+        }
     }
 
     void EndEvent() {
-        Elapsed &top = running_events_.top();
-        top.end = std::chrono::high_resolution_clock::now();
-        std::string name = top.name;
-        float time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                top.end - top.begin).count();
-        auto it = event_map_.find(top.name);
-        if (it == event_map_.end()) {
-            Event event(std::move(top.name), 1, time);
-            event_map_.insert(std::make_pair(event.name, event));
-        } else {
-            Event &event = it->second;
-            event.count++;
-            event.total_time_in_nanoseconds += time;
+        if (enabled_) {
+            Elapsed &top = running_events_.top();
+            top.end = std::chrono::high_resolution_clock::now();
+            std::string name = top.name;
+            float time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    top.end - top.begin).count();
+            auto it = event_map_.find(top.name);
+            if (it == event_map_.end()) {
+                Event event(std::move(top.name), 1, time);
+                event_map_.insert(std::make_pair(event.name, event));
+            } else {
+                Event &event = it->second;
+                event.count++;
+                event.total_time_in_nanoseconds += time;
+            }
+            if (running_events_.size() == 1) {
+                root_ = &event_map_.at(name);
+            }
+            running_events_.pop();
         }
-        if (running_events_.size() == 1) {
-            root = &event_map_.at(name);
-        }
-        running_events_.pop();
+    }
+
+    void SetEnabled(bool enabled) {
+        enabled_ = enabled;
     }
 
 #if USE_GPU
@@ -94,7 +108,7 @@ public:
                 " total time:" << event.total_time_in_nanoseconds / 1000000.0
                 << "avg:" << event.total_time_in_nanoseconds / event.count / 1000000 <<
                 " ratio:" << event.total_time_in_nanoseconds /
-                root->total_time_in_nanoseconds << std::endl;
+                root_->total_time_in_nanoseconds << std::endl;
         }
     }
 
@@ -102,7 +116,9 @@ private:
     Profiler() = default;
     std::map<std::string, Event> event_map_;
     std::stack<Elapsed> running_events_;
-    Event *root = NULL;
+    Event *root_ = NULL;
+    bool enabled_ = false;
+    ProfilerMode mode_ = ProfilerMode::ANALYSIS;
 };
 
 }

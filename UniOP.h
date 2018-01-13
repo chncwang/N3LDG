@@ -297,7 +297,7 @@ class LinearNode : public Node {
 
 class UniExecute :public Execute {
   public:
-    Tensor2D x, ty, y;
+    Tensor2D x, ty, y, b;
     int inDim, outDim;
     UniParams* param;
     dtype(*activate)(const dtype&);   // activation function
@@ -307,24 +307,34 @@ class UniExecute :public Execute {
 
     inline void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.SetEnabled(true);
         profiler.BeginEvent("forward");
+        profiler.SetEnabled(false);
         int count = batch.size();
 
-//        profiler.BeginEvent("init");
+        profiler.BeginEvent("init");
+#if USE_GPU
+#if TEST_CUDA
         ty.init(outDim, count);
         x.init(inDim, count);
         y.init(outDim, count);
         drop_mask.init(outDim, count);
-#if USE_GPU
-//        profiler.EndCudaEvent();
-#if TEST_CUDA
-        Tensor2D b;
         b.init(outDim, count);
+        profiler.EndEvent();
+#else
+        ty.initOnDevice(outDim, count);
+        x.initOnDevice(inDim, count);
+        y.initOnDevice(outDim, count);
+        drop_mask.initOnDevice(outDim, count);
+        profiler.EndCudaEvent();
 #endif
 #else
-        Tensor2D b;
+        ty.init(outDim, count);
+        x.init(inDim, count);
+        y.init(outDim, count);
+        drop_mask.init(outDim, count);
         b.init(outDim, count);
-//        profiler.EndEvent();
+        profiler.EndEvent();
 #endif
 
 #if USE_GPU
@@ -344,28 +354,28 @@ class UniExecute :public Execute {
             n->in->val.copyFromHostToDevice();
 //            profiler.EndCudaEvent();
 
-//            profiler.BeginEvent("vector push_back");
+            profiler.BeginEvent("vector push_back");
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
-//            profiler.EndEvent();
+            profiler.EndEvent();
         }
 
-//        profiler.BeginEvent("CopyForUniNodeForward");
+        profiler.BeginEvent("CopyForUniNodeForward");
         n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
                 ty.value,
                 count,
                 inDim,
                 outDim);
-//        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
 
-//        profiler.BeginEvent("MatrixMultiplyMatrix");
+        profiler.BeginEvent("MatrixMultiplyMatrix");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
                 ty.value,
                 outDim,
                 inDim,
                 count,
                 param->bUseB);
-//        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
 
         profiler.BeginEvent("dropout mask");
         if (bTrain) {
@@ -374,26 +384,28 @@ class UniExecute :public Execute {
         }
         profiler.EndCudaEvent();
 
-//        profiler.BeginEvent("Tanh");
+        profiler.BeginEvent("Tanh");
         n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim, bTrain, drop_factor,
                 drop_mask.value);
-//        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
 
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
 
 //            profiler.BeginEvent("copy between device and host");
-//            n->val.copyFromDeviceToHost();
+            n->val.copyFromDeviceToHost();
 //            profiler.EndCudaEvent();
         }
 
 //        profiler.BeginEvent("copy between device and host");
-//        x.copyFromDeviceToHost();
-//        y.copyFromDeviceToHost();
-//        ty.copyFromDeviceToHost();
+        x.copyFromDeviceToHost();
+        y.copyFromDeviceToHost();
+        ty.copyFromDeviceToHost();
 //        profiler.EndCudaEvent();
 
+        profiler.SetEnabled(true);
         profiler.EndCudaEvent();
+        profiler.SetEnabled(false);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -429,6 +441,7 @@ class UniExecute :public Execute {
                 batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
             }
         }
+
         for (int i = 0; i < count; ++i) {
             dtype drop_value = batch[0]->drop_value;
             batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
@@ -468,30 +481,34 @@ class UniExecute :public Execute {
         }
 
         for (int i = 0; i < count; ++i) {
-            for (int j = 0; j < outDim; ++j) {
-                dtype v = drop_mask[j][i];
-                batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
-            }
-        }
-        for (int i = 0; i < count; ++i) {
             dtype drop_value = batch[0]->drop_value;
             batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
         }
 
+        profiler.SetEnabled(true);
         profiler.EndEvent();
+        profiler.SetEnabled(false);
 #endif
     }
 
     void backward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("backward");
+        profiler.SetEnabled(false);
+        profiler.BeginEvent("backward");
+        profiler.SetEnabled(false);
         int count = batch.size();
         Tensor2D lx, lty, ly;
+#if USE_GPU
+#if TEST_CUDA
         lx.init(inDim, count);
         lty.init(outDim, count);
         ly.init(outDim, count);
+#else
+        lx.initOnDevice(inDim, count);
+        lty.initOnDevice(outDim, count);
+        ly.initOnDevice(outDim, count);
+#endif
 
-#if USE_GPU
         std::vector<dtype*> ly_vec;
         ly_vec.reserve(count);
         for (int i = 0; i < count; ++i) {
@@ -499,24 +516,24 @@ class UniExecute :public Execute {
             ptr->loss.copyFromHostToDevice();
             ly_vec.push_back(ptr->loss.value);
         }
-//        profiler.BeginEvent("cal lty");
+        profiler.BeginEvent("cal lty");
         n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value, y.value,
                 drop_mask.value, drop_factor, lty.value, count, outDim);
-//        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
 //        profiler.BeginEvent("copy");
         param->W.grad.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
-//        profiler.BeginEvent("cal W grad");
+        profiler.BeginEvent("cal W grad");
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
-//        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
 //        profiler.BeginEvent("copy");
-//        param->W.val.copyFromHostToDevice();
+        param->W.val.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
-//        profiler.BeginEvent("cal lx");
+        profiler.BeginEvent("cal lx");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
                 lx.value, inDim, outDim, count, false, false, true);
-//        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
         std::vector<dtype*> losses;
         losses.reserve(count);
         for (int idx = 0; idx < count; idx++) {
@@ -528,12 +545,15 @@ class UniExecute :public Execute {
 //        profiler.BeginEvent("copy");
         param->b.grad.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
-//        profiler.BeginEvent("add bias and losses");
+        profiler.BeginEvent("add bias and losses");
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 lty.value, lx.value, param->b.grad.value, losses, count,
                 outDim, inDim);
-//        profiler.EndCudaEvent();
-//        profiler.EndCudaEvent();
+        profiler.EndCudaEvent();
+
+        profiler.SetEnabled(false);
+        profiler.EndCudaEvent();
+        profiler.SetEnabled(false);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -575,6 +595,9 @@ class UniExecute :public Execute {
         }
 #endif
 #else
+        lx.init(inDim, count);
+        lty.init(outDim, count);
+        ly.init(outDim, count);
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
             ptr->backward_drop();
@@ -602,8 +625,9 @@ class UniExecute :public Execute {
                 ptr->in->loss[idy] += lx[idy][idx];
             }
         }
-
+        profiler.SetEnabled(false);
         profiler.EndEvent();
+        profiler.SetEnabled(false);
 #endif
     }
 };
