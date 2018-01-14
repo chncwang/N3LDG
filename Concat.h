@@ -13,26 +13,43 @@
 #include "MyLib.h"
 #include "Node.h"
 #include "Graph.h"
+#if USE_GPU
+#include "n3ldg_cuda.h"
+#endif
 
 class ConcatNode : public Node {
-  public:
+public:
     vector<int> inDims;
     vector<PNode> ins;
+#if USE_GPU
+    n3ldg_cuda::IntArray dInOffsets;
+    n3ldg_cuda::NumberPointerArray dInValues;
+#endif
 
-  public:
     ConcatNode() : Node() {
         inDims.clear();
         ins.clear();
         node_type = "concat";
     }
 
-    inline void clearValue() {
-        Node::clearValue();
-        inDims.clear();
-        ins.clear();
-    }
+#if USE_GPU
+    void initDeviceMembers() {
+        std::vector<int> inOffsets;
+        inOffsets.resize(ins.size());
+        inOffsets.at(0) = 0;
+        for (int i = 1; i < ins.size(); ++i) {
+            inOffsets.at(i) = inOffsets.at(i - 1) + ins.at(i - 1)->dim;
+        }
 
-  public:
+        dInOffsets.init(inOffsets.data(), inDims.size());
+        std::vector<dtype*> vals;
+        for (PNode p : ins) {
+            vals.push_back(p->val.value);
+        }
+        dInValues.init(vals.data(), ins.size());
+    }
+#endif
+
     void forward(Graph *cg, const vector<PNode>& x) {
         if (x.size() == 0) {
             std::cout << "empty inputs for concat" << std::endl;
@@ -50,6 +67,9 @@ class ConcatNode : public Node {
             ins[i]->addParent(this);
         }
 
+#if USE_GPU
+        initDeviceMembers();
+#endif
         cg->addNode(this);
     }
 
@@ -61,6 +81,9 @@ class ConcatNode : public Node {
         for (int i = 0; i < 1; ++i) {
             ins[i]->addParent(this);
         }
+#if USE_GPU
+        initDeviceMembers();
+#endif
 
         cg->addNode(this);
     }
@@ -75,6 +98,9 @@ class ConcatNode : public Node {
             ins[i]->addParent(this);
         }
 
+#if USE_GPU
+        initDeviceMembers();
+#endif
         cg->addNode(this);
     }
 
@@ -89,6 +115,9 @@ class ConcatNode : public Node {
             ins[i]->addParent(this);
         }
 
+#if USE_GPU
+        initDeviceMembers();
+#endif
         cg->addNode(this);
     }
 
@@ -104,6 +133,9 @@ class ConcatNode : public Node {
             ins[i]->addParent(this);
         }
 
+#if USE_GPU
+        initDeviceMembers();
+#endif
         cg->addNode(this);
     }
 
@@ -120,6 +152,9 @@ class ConcatNode : public Node {
             ins[i]->addParent(this);
         }
 
+#if USE_GPU
+        initDeviceMembers();
+#endif
         cg->addNode(this);
     }
 
@@ -137,21 +172,35 @@ class ConcatNode : public Node {
             ins[i]->addParent(this);
         }
 
+#if USE_GPU
+        initDeviceMembers();
+#endif
         cg->addNode(this);
     }
 
-
-
-  public:
-    inline PExecute generate(bool bTrain, dtype cur_drop_factor);
+    PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
-    inline bool typeEqual(PNode other) {
-        return Node::typeEqual(other);
+    bool typeEqual(PNode other) {
+        if (!Node::typeEqual(other)) {
+            return false;
+        }
+        ConcatNode *o = static_cast<ConcatNode*>(other);
+        if (!isEqual(drop_value, o->drop_value)) {
+            return false;
+        }
+        if (inDims.size() != o->inDims.size()) {
+            return false;
+        }
+        for (int i = 0; i < inDims.size(); ++i) {
+            if (inDims.at(i) != o->inDims.at(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
-  public:
-    inline void compute() {
+    void compute() {
         int nSize = ins.size();
         inDims.clear();
         int curDim = 0;
@@ -187,6 +236,53 @@ class ConcatNode : public Node {
 
 };
 
+#if USE_GPU
+class ConcatExecute : public Execute {
+  public:
+    bool bTrain;
+    int outDim;
+    int *inOffsets;
+    int inCount;
+    Tensor2D drop_mask;
+  public:
+    inline void  forward() {
+        int count = batch.size();
+        drop_mask.initOnDevice(outDim, count);
+        n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
+                drop_mask.value);
+        std::vector<dtype**> ins;
+        ins.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
+#if TEST_CUDA
+            for (int j = 0; j < inCount; ++j) {
+                n->ins[j]->val.copyFromHostToDevice();
+            }
+#endif
+            ins.push_back(n->dInValues.value);
+        }
+        std::vector<dtype*> outs;
+        outs.resize(count);
+        for (int i = 0; i < count; ++i) {
+            ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
+            outs.push_back(n->val.value);
+        }
+        n3ldg_cuda::ConcatForward(ins, inOffsets, outs, count, inCount,
+                outDim);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor);
+            assert(batch[idx]->val.verify("concat forward"));
+        }
+#endif
+    }
+
+    inline void backward() {
+        int count = batch.size();
+    }
+};
+#else
 class ConcatExecute : public Execute {
   public:
     bool bTrain;
@@ -209,12 +305,21 @@ class ConcatExecute : public Execute {
         }
     }
 };
+#endif
 
 inline PExecute ConcatNode::generate(bool bTrain, dtype cur_drop_factor) {
     ConcatExecute* exec = new ConcatExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
+    exec->drop_factor = cur_drop_factor * drop_value;
+#if USE_GPU
+    exec->inCount = this->ins.size();
+    exec->inOffsets = this->dInOffsets.value;
+#endif
+    exec->outDim = 0;
+    for (int d : inDims) {
+        exec->outDim += d;
+    }
     return exec;
 }
 

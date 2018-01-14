@@ -342,17 +342,21 @@ class UniExecute :public Execute {
         xs.reserve(batch.size());
         ys.reserve(batch.size());
 
+#if TEST_CUDA
 //        profiler.BeginEvent("copy between device and host");
         param->W.val.copyFromHostToDevice();
         param->b.val.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
+#endif
 
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
 
+#if TEST_CUDA
 //            profiler.BeginEvent("copy between device and host");
             n->in->val.copyFromHostToDevice();
 //            profiler.EndCudaEvent();
+#endif
 
             profiler.BeginEvent("vector push_back");
             xs.push_back(n->in->val.value);
@@ -392,16 +396,20 @@ class UniExecute :public Execute {
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
 
+#if TEST_CUDA
 //            profiler.BeginEvent("copy between device and host");
             n->val.copyFromDeviceToHost();
 //            profiler.EndCudaEvent();
+#endif
         }
 
+#if TEST_CUDA
 //        profiler.BeginEvent("copy between device and host");
         x.copyFromDeviceToHost();
         y.copyFromDeviceToHost();
         ty.copyFromDeviceToHost();
 //        profiler.EndCudaEvent();
+#endif
 
         profiler.SetEnabled(true);
         profiler.EndCudaEvent();
@@ -513,23 +521,29 @@ class UniExecute :public Execute {
         ly_vec.reserve(count);
         for (int i = 0; i < count; ++i) {
             UniNode* ptr = (UniNode*)batch[i];
+#if TEST_CUDA
             ptr->loss.copyFromHostToDevice();
+#endif
             ly_vec.push_back(ptr->loss.value);
         }
         profiler.BeginEvent("cal lty");
         n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value, y.value,
                 drop_mask.value, drop_factor, lty.value, count, outDim);
         profiler.EndCudaEvent();
+#if TEST_CUDA
 //        profiler.BeginEvent("copy");
         param->W.grad.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
+#endif
         profiler.BeginEvent("cal W grad");
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
         profiler.EndCudaEvent();
+#if TEST_CUDA
 //        profiler.BeginEvent("copy");
         param->W.val.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
+#endif
         profiler.BeginEvent("cal lx");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
                 lx.value, inDim, outDim, count, false, false, true);
@@ -538,13 +552,17 @@ class UniExecute :public Execute {
         losses.reserve(count);
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
+#if TEST_CUDA
             ptr->in->loss.copyFromHostToDevice();
+#endif
             losses.push_back(ptr->in->loss.value);
         }
 
+#if TEST_CUDA
 //        profiler.BeginEvent("copy");
         param->b.grad.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
+#endif
         profiler.BeginEvent("add bias and losses");
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 lty.value, lx.value, param->b.grad.value, losses, count,
