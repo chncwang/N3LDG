@@ -13,6 +13,7 @@
 #include "MyLib.h"
 #include "Node.h"
 #include "Graph.h"
+#include "profiler.h"
 #if USE_GPU
 #include "n3ldg_cuda.h"
 #endif
@@ -24,6 +25,7 @@ public:
 #if USE_GPU
     n3ldg_cuda::IntArray dInOffsets;
     n3ldg_cuda::NumberPointerArray dInValues;
+    n3ldg_cuda::NumberPointerArray dInLosses;
 #endif
 
     ConcatNode() : Node() {
@@ -47,13 +49,19 @@ public:
             vals.push_back(p->val.value);
         }
         dInValues.init(vals.data(), ins.size());
+
+        std::vector<dtype*> losses;
+        for (PNode p : ins) {
+            losses.push_back(p->loss.value);
+        }
+        dInLosses.init(losses.data(), losses.size());
     }
 #endif
 
     void forward(Graph *cg, const vector<PNode>& x) {
         if (x.size() == 0) {
             std::cout << "empty inputs for concat" << std::endl;
-            return;
+            abort();
         }
 
         ins.clear();
@@ -65,6 +73,16 @@ public:
         int nSize = ins.size();
         for (int i = 0; i < nSize; ++i) {
             ins[i]->addParent(this);
+        }
+        inDims.clear();
+        int curDim = 0;
+        for (int i = 0; i < nSize; ++i) {
+            inDims.push_back(ins[i]->val.dim);
+            curDim += inDims[i];
+        }
+        if (curDim != dim) {
+            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
+            abort();
         }
 
 #if USE_GPU
@@ -81,6 +99,17 @@ public:
         for (int i = 0; i < 1; ++i) {
             ins[i]->addParent(this);
         }
+        inDims.clear();
+        int curDim = 0;
+        for (int i = 0; i < ins.size(); ++i) {
+            inDims.push_back(ins[i]->val.dim);
+            curDim += inDims[i];
+        }
+        if (curDim != dim) {
+            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
+            abort();
+        }
+
 #if USE_GPU
         initDeviceMembers();
 #endif
@@ -115,6 +144,16 @@ public:
             ins[i]->addParent(this);
         }
 
+        inDims.clear();
+        int curDim = 0;
+        for (int i = 0; i < ins.size(); ++i) {
+            inDims.push_back(ins[i]->val.dim);
+            curDim += inDims[i];
+        }
+        if (curDim != dim) {
+            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
+            abort();
+        }
 #if USE_GPU
         initDeviceMembers();
 #endif
@@ -151,6 +190,16 @@ public:
         for (int i = 0; i < 5; ++i) {
             ins[i]->addParent(this);
         }
+        inDims.clear();
+        int curDim = 0;
+        for (int i = 0; i < ins.size(); ++i) {
+            inDims.push_back(ins[i]->val.dim);
+            curDim += inDims[i];
+        }
+        if (curDim != dim) {
+            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
+            abort();
+        }
 
 #if USE_GPU
         initDeviceMembers();
@@ -170,6 +219,16 @@ public:
         degree = 0;
         for (int i = 0; i < 6; ++i) {
             ins[i]->addParent(this);
+        }
+        inDims.clear();
+        int curDim = 0;
+        for (int i = 0; i < ins.size(); ++i) {
+            inDims.push_back(ins[i]->val.dim);
+            curDim += inDims[i];
+        }
+        if (curDim != dim) {
+            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
+            abort();
         }
 
 #if USE_GPU
@@ -202,17 +261,6 @@ public:
 
     void compute() {
         int nSize = ins.size();
-        inDims.clear();
-        int curDim = 0;
-        for (int i = 0; i < nSize; ++i) {
-            inDims.push_back(ins[i]->val.dim);
-            curDim += inDims[i];
-        }
-        if (curDim != dim) {
-            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
-            return;
-        }
-
         int offset = 0;
         for (int i = 0; i < nSize; ++i) {
             for (int idx = 0; idx < inDims[i]; idx++) {
@@ -245,11 +293,20 @@ class ConcatExecute : public Execute {
     int inCount;
     Tensor2D drop_mask;
   public:
-    inline void  forward() {
+    void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("concat forward");
         int count = batch.size();
-        drop_mask.initOnDevice(outDim, count);
-        n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
-                drop_mask.value);
+        assert(drop_factor < 1);
+        if (drop_factor > 0) {
+#if TEST_CUDA
+            drop_mask.init(outDim, count);
+#else
+            drop_mask.initOnDevice(outDim, count);
+#endif
+            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
+                    drop_mask.value);
+        }
         std::vector<dtype**> ins;
         ins.reserve(count);
         for (int i = 0; i < count; ++i) {
@@ -262,24 +319,75 @@ class ConcatExecute : public Execute {
             ins.push_back(n->dInValues.value);
         }
         std::vector<dtype*> outs;
-        outs.resize(count);
+        outs.reserve(count);
         for (int i = 0; i < count; ++i) {
             ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
+            assert(n->val.value != NULL);
             outs.push_back(n->val.value);
         }
-        n3ldg_cuda::ConcatForward(ins, inOffsets, outs, count, inCount,
-                outDim);
+//        profiler.BeginEvent("ConcatForward");
+        n3ldg_cuda::ConcatForward(ins, inOffsets, drop_mask.value, drop_factor,
+                outs, count, inCount, outDim);
+//        profiler.EndCudaEvent();
 #if TEST_CUDA
+        if (drop_factor > 0) {
+            drop_mask.copyFromDeviceToHost();
+            for (int i = 0; i < count; ++i) {
+                for (int j = 0; j < outDim; ++j) {
+                    dtype v = drop_mask[j][i];
+                    batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+                }
+            }
+        }
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
+            if (drop_factor > 0) {
+                batch[idx]->forward_drop(bTrain, drop_factor /
+                        batch[0]->drop_value);
+            }
             assert(batch[idx]->val.verify("concat forward"));
         }
 #endif
+        profiler.EndCudaEvent();
     }
 
-    inline void backward() {
+    void backward() {
         int count = batch.size();
+        std::vector<dtype**> in_losses;
+        in_losses.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
+#if TEST_CUDA
+            for (int j = 0; j < inCount; ++j) {
+                n->ins[j]->loss.copyFromHostToDevice();
+            }
+#endif
+            in_losses.push_back(n->dInLosses.value);
+        }
+        std::vector<dtype*> out_losses;
+        out_losses.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
+#if TEST_CUDA
+            n->loss.copyFromHostToDevice();
+#endif
+            out_losses.push_back(n->loss.value);
+        }
+
+        n3ldg_cuda::ConcatBackward(out_losses, inOffsets, drop_mask.value,
+                drop_factor, in_losses, count, inCount, outDim);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            if (drop_factor > 0) {
+                batch[idx]->backward_drop();
+            }
+            batch[idx]->backward();
+            for (int j = 0; j < inCount; ++j) {
+                assert(static_cast<ConcatNode *>(batch[idx])->ins[j]->loss.
+                    verify("concat backward"));
+            }
+        }
+#endif
     }
 };
 #else
@@ -288,12 +396,15 @@ class ConcatExecute : public Execute {
     bool bTrain;
   public:
     inline void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("concat forward");
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
             batch[idx]->forward_drop(bTrain, drop_factor);
         }
+        profiler.EndEvent();
     }
 
     inline void backward() {
@@ -315,11 +426,11 @@ inline PExecute ConcatNode::generate(bool bTrain, dtype cur_drop_factor) {
 #if USE_GPU
     exec->inCount = this->ins.size();
     exec->inOffsets = this->dInOffsets.value;
-#endif
     exec->outDim = 0;
     for (int d : inDims) {
         exec->outDim += d;
     }
+#endif
     return exec;
 }
 
