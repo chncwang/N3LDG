@@ -60,7 +60,9 @@ public:
         E.val.random(sqrt(1.0 / nDim));
         //E.val.norm2one();
         bFineTune = tune;
+#if USE_GPU
         E.val.copyFromHostToDevice();
+#endif
     }
 
     // default should be fineTune, just for initialization
@@ -139,7 +141,9 @@ public:
 
         if (count == 0) {
             E.val.random(sqrt(3.0 / nDim));
+#if USE_GPU
             E.val.copyFromHostToDevice();
+#endif
             std::cout << "find no overlapped lexicons in the embedding file" << std::endl;
             return false;
         }
@@ -171,7 +175,9 @@ public:
         if (norm > 0) {
             E.val.norm2one(norm);
         }
+#if USE_GPU
         E.val.copyFromHostToDevice();
+#endif
         return true;
     }
 
@@ -349,9 +355,12 @@ class LookupExecute :public Execute {
             int count = batch.size();
             //#pragma omp parallel for
             for (int idx = 0; idx < count; idx++) {
+                n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+                profiler.BeginEvent("LookupNode forward");
                 batch[idx]->compute();
                 batch[idx]->forward_drop(bTrain, drop_factor /
                         batch[0]->drop_value);
+                profiler.EndEvent();
             }
         }
 
@@ -372,8 +381,10 @@ PExecute LookupNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor * drop_value;
+#if USE_GPU
     exec->table = param;
     exec->dim = dim;
+#endif
     return exec;
 }
 
