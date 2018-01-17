@@ -295,7 +295,7 @@ class ConcatExecute : public Execute {
   public:
     void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("concat forward");
+//        profiler.BeginEvent("concat forward");
         int count = batch.size();
         assert(drop_factor < 1);
         if (drop_factor > 0) {
@@ -345,13 +345,15 @@ class ConcatExecute : public Execute {
                 batch[idx]->forward_drop(bTrain, drop_factor /
                         batch[0]->drop_value);
             }
-            assert(batch[idx]->val.verify("concat forward"));
+            n3ldg_cuda::Assert(batch[idx]->val.verify("concat forward"));
         }
 #endif
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
     }
 
     void backward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        //profiler.BeginEvent("concat backward");
         int count = batch.size();
         std::vector<dtype**> in_losses;
         in_losses.reserve(count);
@@ -370,6 +372,9 @@ class ConcatExecute : public Execute {
             ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
 #if TEST_CUDA
             n->loss.copyFromHostToDevice();
+            for (int j=0; j < inCount; ++j) {
+                n->ins[j]->loss.copyFromHostToDevice();
+            }
 #endif
             out_losses.push_back(n->loss.value);
         }
@@ -382,12 +387,15 @@ class ConcatExecute : public Execute {
                 batch[idx]->backward_drop();
             }
             batch[idx]->backward();
+        }
+        for (int idx = 0; idx < count; idx++) {
             for (int j = 0; j < inCount; ++j) {
-                assert(static_cast<ConcatNode *>(batch[idx])->ins[j]->loss.
-                    verify("concat backward"));
+                n3ldg_cuda::Assert(static_cast<ConcatNode *>(batch[idx])->
+                        ins[j]->loss.verify("concat backward"));
             }
         }
 #endif
+        //profiler.EndCudaEvent();
     }
 };
 #else
@@ -397,23 +405,26 @@ class ConcatExecute : public Execute {
   public:
     inline void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("concat forward");
+//        profiler.BeginEvent("concat forward");
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
             batch[idx]->forward_drop(bTrain, drop_factor);
         }
-        profiler.EndEvent();
+//        profiler.EndEvent();
     }
 
     inline void backward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+//        profiler.BeginEvent("concat backward");
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward_drop();
             batch[idx]->backward();
         }
+//        profiler.EndEvent();
     }
 };
 #endif

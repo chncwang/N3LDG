@@ -39,15 +39,32 @@ class BucketNode : public Node {
 
   public:
     void forward(Graph *cg, dtype value) {
+#if TEST_CUDA
+        val  = value;
+        loss = 0;
+#endif
+#if USE_GPU
+        n3ldg_cuda::Memset(val.value, dim, value);
+        n3ldg_cuda::Memset(loss.value, dim, 0.0f);
+#if TEST_CUDA
+        n3ldg_cuda::Assert(val.verify("bucket forward"));
+        n3ldg_cuda::Assert(loss.verify("loss verify"));
+#endif
+#else
         val = value;
         loss = 0;
+#endif
         degree = 0;
         cg->addNode(this);
     }
 
     //value already assigned
     void forward(Graph *cg) {
+#if USE_GPU
+        n3ldg_cuda::Memset(loss.value, dim, 0.0f);
+#else
         loss = 0;
+#endif
         degree = 0;
         cg->addNode(this);
     }
@@ -70,6 +87,17 @@ class BucketNode : public Node {
 
 };
 
+#if USE_GPU
+class BucketExecute : public Execute {
+  public:
+    bool bTrain;
+  public:
+    void  forward() {}
+
+    void backward() {}
+};
+
+#else
 class BucketExecute : public Execute {
   public:
     bool bTrain;
@@ -90,6 +118,7 @@ class BucketExecute : public Execute {
         }
     }
 };
+#endif
 
 inline PExecute BucketNode::generate(bool bTrain, dtype cur_drop_factor) {
     BucketExecute* exec = new BucketExecute();

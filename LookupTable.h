@@ -2,12 +2,12 @@
 #define _LOOKUPTABLE_H_
 
 /*
-*  LookupTable.h:
-*  Lookup operation, for embeddings
-*
-*  Created on: Apr 22, 2017
-*      Author: mszhang
-*/
+ *  LookupTable.h:
+ *  Lookup operation, for embeddings
+ *
+ *  Created on: Apr 22, 2017
+ *      Author: mszhang
+ */
 
 #include "SparseParam.h"
 #include "MyLib.h"
@@ -15,17 +15,16 @@
 #include "Node.h"
 #include "Graph.h"
 #include "ModelUpdate.h"
+#include "profiler.h"
 
 class LookupTable {
-  public:
+public:
     PAlphabet elems;
     SparseParam E;
     bool bFineTune;
     int nDim;
     int nVSize;
     int nUNKId;
-
-  public:
 
     LookupTable() {
         nVSize = 0;
@@ -61,6 +60,7 @@ class LookupTable {
         E.val.random(sqrt(1.0 / nDim));
         //E.val.norm2one();
         bFineTune = tune;
+        E.val.copyFromHostToDevice();
     }
 
     // default should be fineTune, just for initialization
@@ -139,6 +139,7 @@ class LookupTable {
 
         if (count == 0) {
             E.val.random(sqrt(3.0 / nDim));
+            E.val.copyFromHostToDevice();
             std::cout << "find no overlapped lexicons in the embedding file" << std::endl;
             return false;
         }
@@ -170,6 +171,7 @@ class LookupTable {
         if (norm > 0) {
             E.val.norm2one(norm);
         }
+        E.val.copyFromHostToDevice();
         return true;
     }
 
@@ -206,11 +208,10 @@ class LookupTable {
 
 
 class LookupNode : public Node {
-  public:
+public:
     LookupTable* param;
     int xid;
 
-  public:
     LookupNode() {
         xid = -1;
         param = NULL;
@@ -226,7 +227,6 @@ class LookupNode : public Node {
         xid = -1;
     }
 
-  public:
     //notice the output
     //this should be leaf nodes
     void forward(Graph *cg, const string& strNorm) {
@@ -242,7 +242,6 @@ class LookupNode : public Node {
         cg->addNode(this);
     }
 
-  public:
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
@@ -255,11 +254,14 @@ class LookupNode : public Node {
             return false;
         }
 
+        if (!isEqual(drop_value, conv_other->drop_value)) {
+            return false;
+        }
+
         return true;
     }
 
     // for which do no require merge
-  public:
     void compute() {
         if (xid >= 0) {
             param->E.value(xid, val);
@@ -277,35 +279,101 @@ class LookupNode : public Node {
 };
 
 
+#if USE_GPU
 class LookupExecute :public Execute {
-  public:
+public:
     bool bTrain;
-  public:
+    dtype drop_factor;
+    int dim;
+    Tensor2D drop_mask;
+    LookupTable *table;
+
     inline void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("lookup forward");
         int count = batch.size();
-        //#pragma omp parallel for
+        if (bTrain && drop_factor > 0) {
+#if TEST_CUDA
+            drop_mask.init(dim, count);
+#else
+            drop_mask.initOnDevice(dim, count);
+#endif
+            //profiler.BeginEvent("dropout mask");
+            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
+                    drop_mask.value);
+            //profiler.EndCudaEvent();
+        }
+        std::vector<int> xids;
+        xids.reserve(count);
+        std::vector<dtype*> vals;
+        vals.reserve(count);
+        for (int idx = 0; idx < count; idx++) {
+            LookupNode *n = static_cast<LookupNode*>(batch[idx]);
+            xids.push_back(n->xid);
+            vals.push_back(n->val.value);
+        }
+
+        n3ldg_cuda::LookupForward(xids, table->E.val.value, table->E.val.col,
+                drop_mask.value, drop_factor, count, dim, vals);
+#if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
+            drop_mask.copyFromDeviceToHost();
+            for (int i = 0; i < count; ++i) {
+                for (int j = 0; j < dim; ++j) {
+                    dtype v = drop_mask[j][i];
+                    batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+                }
+            }
+            batch[idx]->forward_drop(bTrain, drop_factor /
+                    batch[0]->drop_value);
+            int xid = static_cast<LookupNode*>(batch[idx])->xid;
+            n3ldg_cuda::Assert(batch[idx]->val.verify("lookup forward"));
         }
+#endif
+        profiler.EndCudaEvent();
     }
 
     inline void backward() {
         int count = batch.size();
-        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
         }
     }
 };
+#else
+class LookupExecute :public Execute {
+    public:
+        bool bTrain;
+    public:
+        inline void  forward() {
+            int count = batch.size();
+            //#pragma omp parallel for
+            for (int idx = 0; idx < count; idx++) {
+                batch[idx]->compute();
+                batch[idx]->forward_drop(bTrain, drop_factor /
+                        batch[0]->drop_value);
+            }
+        }
+
+        inline void backward() {
+            int count = batch.size();
+            //#pragma omp parallel for
+            for (int idx = 0; idx < count; idx++) {
+                batch[idx]->backward_drop();
+                batch[idx]->backward();
+            }
+        }
+};
+#endif
 
 
-inline PExecute LookupNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute LookupNode::generate(bool bTrain, dtype cur_drop_factor) {
     LookupExecute* exec = new LookupExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
+    exec->drop_factor = cur_drop_factor * drop_value;
+    exec->table = param;
+    exec->dim = dim;
     return exec;
 }
 
