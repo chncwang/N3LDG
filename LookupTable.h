@@ -293,6 +293,7 @@ public:
     int dim;
     Tensor2D drop_mask;
     LookupTable *table;
+    std::vector<int> xids;
 
     inline void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
@@ -309,7 +310,6 @@ public:
                     drop_mask.value);
             //profiler.EndCudaEvent();
         }
-        std::vector<int> xids;
         xids.reserve(count);
         std::vector<dtype*> vals;
         vals.reserve(count);
@@ -319,16 +319,18 @@ public:
             vals.push_back(n->val.value);
         }
 
-        n3ldg_cuda::LookupForward(xids, table->E.val.value, table->E.val.col,
-                drop_mask.value, drop_factor, count, dim, vals);
+        n3ldg_cuda::LookupForward(xids, table->E.val.value, drop_mask.value,
+                drop_factor, count, dim, vals);
 #if TEST_CUDA
+        drop_mask.copyFromDeviceToHost();
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            drop_mask.copyFromDeviceToHost();
-            for (int i = 0; i < count; ++i) {
-                for (int j = 0; j < dim; ++j) {
-                    dtype v = drop_mask[j][i];
-                    batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+            if (drop_factor > 0) {
+                for (int i = 0; i < count; ++i) {
+                    for (int j = 0; j < dim; ++j) {
+                        dtype v = drop_mask[j][i];
+                        batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+                    }
                 }
             }
             batch[idx]->forward_drop(bTrain, drop_factor /
@@ -341,9 +343,42 @@ public:
     }
 
     inline void backward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        //profiler.BeginEvent("backward");
         int count = batch.size();
-        for (int idx = 0; idx < count; idx++) {
+        std::vector<dtype*> losses;
+        losses.reserve(count);
+        for (Node *n : batch) {
+            losses.push_back(n->loss.value);
+#if TEST_CUDA
+            n->loss.copyFromHostToDevice();
+#endif
         }
+#if TEST_CUDA
+        table->E.grad.copyFromHostToDevice();
+        table->E.dIndexers.copyFromHost(table->E.indexers.c_buf());
+#endif
+        n3ldg_cuda::LookupBackward(xids, table->nUNKId, table->bFineTune,
+                losses,
+                drop_mask.value,
+                drop_factor,
+                count,
+                dim,
+                table->E.grad.value,
+                table->E.dIndexers.value);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
+        }
+
+        n3ldg_cuda::Assert(table->E.grad.verify("lookup backward grad"));
+        n3ldg_cuda::Assert(n3ldg_cuda::Verify(table->E.indexers.c_buf(),
+                    table->E.dIndexers.value,
+                    table->E.dIndexers.len,
+                    "lookup backward index"));
+#endif
+        //profiler.EndCudaEvent();
     }
 };
 #else

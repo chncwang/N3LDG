@@ -18,7 +18,9 @@ class SparseParam : public BaseParam {
     Tensor2D aux_mean;
     NRVec<bool> indexers;
     NRVec<int> last_update;
-
+#if USE_GPU
+    n3ldg_cuda::BoolArray dIndexers;
+#endif
 
     // allow sparse and dense parameters have different parameter initialization methods
     inline void initial(int outDim, int inDim) {
@@ -34,6 +36,9 @@ class SparseParam : public BaseParam {
         indexers = false;
         last_update.resize(inDim);
         last_update = 0;
+#if USE_GPU
+        dIndexers.init(indexers.c_buf(), indexers.size());
+#endif
     }
 
     inline void clearGrad() {
