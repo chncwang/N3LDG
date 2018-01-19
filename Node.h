@@ -121,11 +121,19 @@ class Node {
 
     virtual inline Execute* generate(bool bTrain, dtype cur_drop_factor) = 0;
 
-    virtual inline bool typeEqual(Node* other) {
-        if (node_type.compare(other->node_type) == 0) {
-            return true;
+    virtual bool typeEqual(Node* other) {
+        if (node_type.compare(other->node_type) != 0) {
+            return false;
         }
-        return false;
+#if USE_GPU
+        if (dim != other->dim) {
+            return false;
+        }
+        if (!isEqual(drop_value, other->drop_value)) {
+            return false;
+        }
+#endif
+        return true;
     }
 
   public:

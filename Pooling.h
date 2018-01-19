@@ -12,7 +12,9 @@
 #include "MyLib.h"
 #include "Node.h"
 #include "Graph.h"
-
+#if USE_GPU
+#include "n3ldg_cuda.h"
+#endif
 
 class PoolNode : public Node {
   public:
@@ -88,7 +90,8 @@ class PoolNode : public Node {
         int nSize = ins.size();
         setMask();
         for(int i = 0; i < dim; i++) {
-            val[i] = ins[masks[i]]->val[i];
+            int mask_i = masks.at(i);
+            val[i] = ins.at(mask_i)->val[i];
         }
     }
 
@@ -100,15 +103,85 @@ class PoolNode : public Node {
 
 };
 
+#if USE_GPU
+class MaxPoolNode : public
+#if TEST_CUDA
+                    PoolNode
+#else
+                    Node
+#endif
+{
+public:
+#if !TEST_CUDA
+    vector<PNode> ins;
+#endif
+    n3ldg_cuda::NumberPointerArray dInValues;
+
+    MaxPoolNode() {
+        node_type = "max-pooling";
+    }
+
+#if TEST_CUDA
+    void setMask() {
+        int nSize = ins.size();
+
+        for (int idx = 0; idx < dim; idx++) {
+            int maxIndex = -1;
+            for (int i = 0; i < nSize; ++i) {
+                if (maxIndex == -1 || ins[i]->val[idx] > ins[maxIndex]->val[idx]) {
+                    maxIndex = i;
+                }
+            }
+            masks[idx] = maxIndex;
+        }
+    }
+#else
+    void compute() {
+        abort();
+    }
+
+    void backward() {
+        abort();
+    }
+#endif
+
+    void forward(Graph *cg, const vector<PNode>& x) {
+        assert(!x.empty());
+        int nSize = x.size();
+        ins.clear();
+        for (int i = 0; i < nSize; i++) {
+            assert(x[i]->val.dim == dim);
+            ins.push_back(x[i]);
+        }
+
+        degree = 0;
+        for (int i = 0; i < nSize; i++) {
+            ins[i]->addParent(this);
+        }
+
+        initDeviceMembers();
+        cg->addNode(this);
+    }
+
+    void initDeviceMembers() {
+        std::vector<dtype*> values;
+        values.reserve(ins.size());
+        for (Node *n : ins) {
+            values.push_back(n->val.value);
+        }
+
+        dInValues.init(values.data(), values.size());
+    }
+
+    PExecute generate(bool bTrain, dtype cur_drop_factor) override;
+};
+#else
 class MaxPoolNode : public PoolNode {
   public:
     MaxPoolNode() : PoolNode() {
         node_type = "max-pooling";
     }
 
-  public:
-    //Be careful that the row is the dim of input vector, and the col is the number of input vectors
-    //Another point is that we change the input vectors directly.
     void setMask() {
         int nSize = ins.size();
 
@@ -124,6 +197,7 @@ class MaxPoolNode : public PoolNode {
     }
 
 };
+#endif
 
 
 
@@ -151,13 +225,59 @@ class MinPoolNode : public PoolNode {
 
 };
 
+#if USE_GPU
+class MaxPoolExecute : public Execute
+{
+public:
+    int dim;
+    n3ldg_cuda::IntArray hit_inputs;
 
+    void forward() override {
+        int count = batch.size();
+        hit_inputs.init(count);
+        std::vector<dtype**> ins;
+        ins.reserve(count);
+        std::vector<int> in_counts;
+        in_counts.reserve(count);
+        std::vector<dtype*> outs;
+        outs.reserve(count);
+        for (Node *n : batch) {
+            MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
+            ins.push_back(m->dInValues.value);
+            in_counts.push_back(m->ins.size());
+#if TEST_CUDA
+            for (Node *nn : m->ins) {
+                nn->val.copyFromHostToDevice();
+            }
+#endif
+            outs.push_back(n->val.value);
+        }
+        n3ldg_cuda::MaxPoolForward(ins, count, in_counts, dim, hit_inputs.value, outs);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+            n3ldg_cuda::Assert(batch[idx]->val.verify("max pooling forward"));
+        }
+#endif
+    }
+
+    void backward() override {
+    }
+};
+
+PExecute MaxPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
+    MaxPoolExecute *exec = new MaxPoolExecute;
+    exec->batch.push_back(this);
+    exec->dim = dim;
+    return exec;
+}
+#endif
 
 class PoolExecute : public Execute {
   public:
     bool bTrain;
   public:
-    inline void  forward() {
+    virtual void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
@@ -166,7 +286,7 @@ class PoolExecute : public Execute {
         }
     }
 
-    inline void backward() {
+    virtual void backward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {

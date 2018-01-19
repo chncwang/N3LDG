@@ -297,7 +297,7 @@ public:
 
     inline void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("lookup forward");
+        //profiler.BeginEvent("lookup forward");
         int count = batch.size();
         if (bTrain && drop_factor > 0) {
 #if TEST_CUDA
@@ -339,7 +339,7 @@ public:
             n3ldg_cuda::Assert(batch[idx]->val.verify("lookup forward"));
         }
 #endif
-        profiler.EndCudaEvent();
+        //profiler.EndCudaEvent();
     }
 
     inline void backward() {
@@ -391,21 +391,24 @@ class LookupExecute :public Execute {
             //#pragma omp parallel for
             for (int idx = 0; idx < count; idx++) {
                 n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-                profiler.BeginEvent("LookupNode forward");
+                //profiler.BeginEvent("LookupNode forward");
                 batch[idx]->compute();
                 batch[idx]->forward_drop(bTrain, drop_factor /
                         batch[0]->drop_value);
-                profiler.EndEvent();
+                //profiler.EndEvent();
             }
         }
 
         inline void backward() {
+            n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+            profiler.BeginEvent("lookup backward");
             int count = batch.size();
             //#pragma omp parallel for
             for (int idx = 0; idx < count; idx++) {
                 batch[idx]->backward_drop();
                 batch[idx]->backward();
             }
+            profiler.EndEvent();
         }
 };
 #endif
