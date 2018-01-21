@@ -51,6 +51,8 @@ class PoolNode : public Node {
 
   public:
     void forward(Graph *cg, const vector<PNode>& x) {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("pool forward");
         if (x.size() == 0) {
             std::cout << "empty inputs for max|min|sum|avg pooling" << std::endl;
             return;
@@ -72,6 +74,7 @@ class PoolNode : public Node {
         }
 
         cg->addNode(this);
+        profiler.EndEvent();
     }
 
 
@@ -116,6 +119,7 @@ public:
     vector<PNode> ins;
 #endif
     n3ldg_cuda::NumberPointerArray dInValues;
+    n3ldg_cuda::NumberPointerArray dInLosses;
 
     MaxPoolNode() {
         node_type = "max-pooling";
@@ -166,11 +170,15 @@ public:
     void initDeviceMembers() {
         std::vector<dtype*> values;
         values.reserve(ins.size());
+        std::vector<dtype*> losses;
+        losses.reserve(ins.size());
         for (Node *n : ins) {
             values.push_back(n->val.value);
+            losses.push_back(n->loss.value);
         }
 
         dInValues.init(values.data(), values.size());
+        dInLosses.init(values.data(), values.size());
     }
 
     PExecute generate(bool bTrain, dtype cur_drop_factor) override;
@@ -233,8 +241,10 @@ public:
     n3ldg_cuda::IntArray hit_inputs;
 
     void forward() override {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+//        profiler.BeginEvent("max pool forward");
         int count = batch.size();
-        hit_inputs.init(count);
+        hit_inputs.init(count * dim);
         std::vector<dtype**> ins;
         ins.reserve(count);
         std::vector<int> in_counts;
@@ -252,7 +262,9 @@ public:
 #endif
             outs.push_back(n->val.value);
         }
-        n3ldg_cuda::MaxPoolForward(ins, count, in_counts, dim, hit_inputs.value, outs);
+        n3ldg_cuda::MaxPoolForward(ins, count, in_counts, dim,
+                hit_inputs.value, outs);
+//        profiler.EndCudaEvent();
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
@@ -262,6 +274,31 @@ public:
     }
 
     void backward() override {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+//        profiler.BeginEvent("max pool backward");
+        int count = batch.size();
+        std::vector<dtype*> losses;
+        losses.reserve(count);
+        std::vector<dtype**> in_losses;
+        in_losses.reserve(count);
+        for (Node *n : batch) {
+            MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
+            m->loss.copyFromHostToDevice();
+            losses.push_back(m->loss.value);
+            in_losses.push_back(m->dInLosses.value);
+        }
+        n3ldg_cuda::MaxPoolBackward(losses, hit_inputs.value, count, dim,
+                in_losses);
+//        profiler.EndCudaEvent();
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward();
+        }
+        for (int idx = 0; idx < count; idx++) {
+            n3ldg_cuda::Assert(batch[idx]->loss.verify(
+                        "max pooling backward"));
+        }
+#endif
     }
 };
 

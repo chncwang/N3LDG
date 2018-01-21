@@ -302,6 +302,7 @@ public:
         if (bTrain && drop_factor > 0) {
 #if TEST_CUDA
             drop_mask.init(dim, count);
+            table->E.val.copyFromHostToDevice();
 #else
             drop_mask.initOnDevice(dim, count);
 #endif
@@ -401,14 +402,14 @@ class LookupExecute :public Execute {
 
         inline void backward() {
             n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-            profiler.BeginEvent("lookup backward");
+//            profiler.BeginEvent("lookup backward");
             int count = batch.size();
             //#pragma omp parallel for
             for (int idx = 0; idx < count; idx++) {
                 batch[idx]->backward_drop();
                 batch[idx]->backward();
             }
-            profiler.EndEvent();
+//            profiler.EndEvent();
         }
 };
 #endif

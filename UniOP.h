@@ -683,34 +683,272 @@ inline PExecute LinearUniNode::generate(bool bTrain, dtype cur_drop_factor) {
     return exec;
 };
 
+#if USE_GPU
+class LinearExecute :public Execute {
+public:
+    Tensor2D x, y, b;
+    int inDim, outDim, count;
+    UniParams* param;
+    bool bTrain;
+
+    inline void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+//        profiler.BeginEvent("forward");
+        int count = batch.size();
+
+//        profiler.BeginEvent("init");
+#if TEST_CUDA
+        x.init(inDim, count);
+        y.init(outDim, count);
+        b.init(outDim, count);
+//        profiler.EndEvent();
+#else
+        x.initOnDevice(inDim, count);
+        y.initOnDevice(outDim, count);
+//        profiler.EndCudaEvent();
+#endif
+        std::vector<dtype*> xs, ys;
+        xs.reserve(batch.size());
+        ys.reserve(batch.size());
+
+#if TEST_CUDA
+//        profiler.BeginEvent("copy between device and host");
+        param->W.val.copyFromHostToDevice();
+        param->b.val.copyFromHostToDevice();
+//        profiler.EndCudaEvent();
+#endif
+
+        for (int i = 0; i < batch.size(); ++i) {
+            LinearNode *n = static_cast<LinearNode*>(batch.at(i));
+
+#if TEST_CUDA
+//            profiler.BeginEvent("copy between device and host");
+            n->in->val.copyFromHostToDevice();
+//            profiler.EndCudaEvent();
+#endif
+
+//            profiler.BeginEvent("vector push_back");
+            xs.push_back(n->in->val.value);
+            ys.push_back(n->val.value);
+//            profiler.EndEvent();
+        }
+
+//        profiler.BeginEvent("CopyForUniNodeForward");
+        n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
+                y.value,
+                count,
+                inDim,
+                outDim);
+//        profiler.EndCudaEvent();
+
+//        profiler.BeginEvent("MatrixMultiplyMatrix");
+        n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
+                y.value,
+                outDim,
+                inDim,
+                count,
+                param->bUseB);
+//        profiler.EndCudaEvent();
+
+//        profiler.BeginEvent("dropout mask");
+//        profiler.EndCudaEvent();
+
+        for (int i = 0; i<batch.size(); ++i) {
+            LinearNode *n = static_cast<LinearNode*>(batch.at(i));
+#if TEST_CUDA
+//            profiler.BeginEvent("copy between device and host");
+            n->val.copyFromDeviceToHost();
+//            profiler.EndCudaEvent();
+#endif
+        }
+
+#if TEST_CUDA
+//        profiler.BeginEvent("copy between device and host");
+        x.copyFromDeviceToHost();
+        y.copyFromDeviceToHost();
+//        profiler.EndCudaEvent();
+#endif
+
+//        profiler.EndCudaEvent();
+#if TEST_CUDA
+        x.verify("forward x");
+        y.verify("forward y");
+#endif
+    }
+
+    inline void backward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        int count = batch.size();
+        Tensor2D lx, ly;
+        lx.initOnDevice(inDim, count);
+        ly.initOnDevice(outDim, count);
+        //profiler.BeginEvent("backward");
+#if USE_GPU
+#if TEST_CUDA
+        lx.init(inDim, count);
+        ly.init(outDim, count);
+#else
+        lx.initOnDevice(inDim, count);
+        ly.initOnDevice(outDim, count);
+#endif
+
+        std::vector<dtype*> ly_vec;
+        ly_vec.reserve(count);
+        for (int i = 0; i < count; ++i) {
+            UniNode* ptr = (UniNode*)batch[i];
+#if TEST_CUDA
+            ptr->loss.copyFromHostToDevice();
+#endif
+            ly_vec.push_back(ptr->loss.value);
+        }
+#if TEST_CUDA
+//        profiler.BeginEvent("copy");
+        param->W.grad.copyFromHostToDevice();
+//        profiler.EndCudaEvent();
+#endif
+//        profiler.BeginEvent("cal W grad");
+        n3ldg_cuda::MatrixMultiplyMatrix(ly.value, x.value,
+                param->W.grad.value, outDim, count, inDim, true, true, false);
+//        profiler.EndCudaEvent();
+#if TEST_CUDA
+//        profiler.BeginEvent("copy");
+        param->W.val.copyFromHostToDevice();
+//        profiler.EndCudaEvent();
+#endif
+//        profiler.BeginEvent("cal lx");
+        n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, ly.value,
+                lx.value, inDim, outDim, count, false, false, true);
+//        profiler.EndCudaEvent();
+        std::vector<dtype*> losses;
+        losses.reserve(count);
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+#if TEST_CUDA
+            ptr->in->loss.copyFromHostToDevice();
+#endif
+            losses.push_back(ptr->in->loss.value);
+        }
+
+#if TEST_CUDA
+//        profiler.BeginEvent("copy");
+        param->b.grad.copyFromHostToDevice();
+//        profiler.EndCudaEvent();
+#endif
+//        profiler.BeginEvent("add bias and losses");
+        n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
+                ly.value, lx.value, param->b.grad.value, losses, count,
+                outDim, inDim);
+//        profiler.EndCudaEvent();
+
+        //profiler.EndCudaEvent();
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            ptr->backward_drop();
+            for (int idy = 0; idy < outDim; idy++) {
+                ly[idy][idx] = ptr->loss[idy];
+            }
+        }
+
+        assert(x.verify("backward x"));
+
+        param->W.grad.mat() += ly.mat() * x.mat().transpose();
+        param->W.grad.verify("backward W grad");
+
+        if (param->bUseB) {
+            for (int idx = 0; idx < count; idx++) {
+                for (int idy = 0; idy < outDim; idy++) {
+                    param->b.grad.v[idy] += ly[idy][idx];
+                }
+            }
+        }
+        param->b.grad.verify("backward b grad");
+
+        lx.mat() += param->W.val.mat().transpose() * ly.mat();
+        lx.verify("backward lx");
+
+        for (int idx = 0; idx < count; idx++) {
+            UniNode* ptr = (UniNode*)batch[idx];
+            for (int idy = 0; idy < inDim; idy++) {
+                ptr->in->loss[idy] += lx[idy][idx];
+            }
+        }
+
+        for (Node * n : batch) {
+            UniNode *ptr = static_cast<UniNode *>(n);
+            ptr->in->loss.verify("backward loss");
+        }
+#endif
+    }
+};
+#else
 class LinearExecute :public Execute {
   public:
+    Tensor2D x, y;
+    int inDim, outDim, count;
+    UniParams* param;
     bool bTrain;
+
   public:
     inline void  forward() {
-        int count = batch.size();
-        //#pragma omp parallel for
+        count = batch.size();
+        x.init(inDim, count);
+        y.init(outDim, count);
+
+
         for (int idx = 0; idx < count; idx++) {
-            batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
+            LinearNode* ptr = (LinearNode*)batch[idx];
+            for (int idy = 0; idy < inDim; idy++) {
+                x[idx][idy] = ptr->in->val[idy];
+            }
+        }
+
+        y.mat() = param->W.val.mat() * x.mat();
+
+        for (int idx = 0; idx < count; idx++) {
+            LinearNode* ptr = (LinearNode*)batch[idx];
+            for (int idy = 0; idy < outDim; idy++) {
+                ptr->val[idy] = y[idx][idy];
+            }
+            ptr->forward_drop(bTrain);
         }
     }
 
     inline void backward() {
-        int count = batch.size();
-        //#pragma omp parallel for
+        Tensor2D lx, ly;
+        lx.init(inDim, count);
+        ly.init(outDim, count);
+
         for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
+            LinearNode* ptr = (LinearNode*)batch[idx];
+            ptr->backward_drop();
+            for (int idy = 0; idy < outDim; idy++) {
+                ly[idx][idy] = ptr->loss[idy];
+            }
         }
+
+        param->W.grad.mat() += ly.mat() * x.mat().transpose();
+
+        lx.mat() += param->W.val.mat().transpose() * ly.mat();
+
+        for (int idx = 0; idx < count; idx++) {
+            LinearNode* ptr = (LinearNode*)batch[idx];
+            for (int idy = 0; idy < inDim; idy++) {
+                ptr->in->loss[idy] += lx[idx][idy];
+            }
+        }
+
     }
 };
+#endif
 
 inline PExecute LinearNode::generate(bool bTrain, dtype cur_drop_factor) {
     LinearExecute* exec = new LinearExecute();
     exec->batch.push_back(this);
+    exec->inDim = param->W.inDim();
+    exec->outDim = param->W.outDim();
+    exec->param = param;
     exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
     return exec;
 };
 
