@@ -299,6 +299,9 @@ public:
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         //profiler.BeginEvent("lookup forward");
         int count = batch.size();
+#if TEST_CUDA
+        table->E.val.copyFromHostToDevice();
+#endif
         if (bTrain && drop_factor > 0) {
 #if TEST_CUDA
             drop_mask.init(dim, count);

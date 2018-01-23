@@ -51,8 +51,6 @@ class PoolNode : public Node {
 
   public:
     void forward(Graph *cg, const vector<PNode>& x) {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("pool forward");
         if (x.size() == 0) {
             std::cout << "empty inputs for max|min|sum|avg pooling" << std::endl;
             return;
@@ -74,7 +72,6 @@ class PoolNode : public Node {
         }
 
         cg->addNode(this);
-        profiler.EndEvent();
     }
 
 
