@@ -20,6 +20,16 @@ class SparseParam : public BaseParam {
     NRVec<int> last_update;
 #if USE_GPU
     n3ldg_cuda::BoolArray dIndexers;
+
+    void copyFromDeviceToHost() override {
+        BaseParam::copyFromDeviceToHost();
+        dIndexers.copyToHost(indexers.c_buf());
+    }
+
+    void copyFromHostToDevice() override {
+        BaseParam::copyFromHostToDevice();
+        dIndexers.copyFromHost(indexers.c_buf());
+    }
 #endif
 
     // allow sparse and dense parameters have different parameter initialization methods

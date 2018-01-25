@@ -125,15 +125,29 @@ public:
 #if TEST_CUDA
     void setMask() {
         int nSize = ins.size();
+        int thread_count = 8;
+        while (thread_count < nSize) {
+            thread_count <<= 1;
+        }
 
-        for (int idx = 0; idx < dim; idx++) {
-            int maxIndex = -1;
-            for (int i = 0; i < nSize; ++i) {
-                if (maxIndex == -1 || ins[i]->val[idx] > ins[maxIndex]->val[idx]) {
-                    maxIndex = i;
-                }
+        for (int dim_i = 0; dim_i < dim; ++dim_i) {
+            dtype shared_arr[1024];
+            dtype shared_indexers[1024];
+            for (int i = 0; i < 1024; ++i) {
+                shared_arr[i] = i < nSize ? ins[i]->val[dim_i] : -INFINITY;
+                shared_indexers[i] = i;
             }
-            masks[idx] = maxIndex;
+            for (int i = (thread_count >> 1); i > 0; i >>= 1) {
+                for (int j = 0; j < i; ++j) {
+                    int plus_i = j + i;
+                    if (shared_arr[j] < shared_arr[plus_i]) {
+                        shared_arr[j] = shared_arr[plus_i];
+                        shared_indexers[j] = shared_indexers[plus_i];
+                    }
+                }
+
+                masks[dim_i] = shared_indexers[0];
+            }
         }
     }
 #else
@@ -175,7 +189,7 @@ public:
         }
 
         dInValues.init(values.data(), values.size());
-        dInLosses.init(values.data(), values.size());
+        dInLosses.init(losses.data(), losses.size());
     }
 
     PExecute generate(bool bTrain, dtype cur_drop_factor) override;
@@ -254,7 +268,7 @@ public:
             in_counts.push_back(m->ins.size());
 #if TEST_CUDA
             for (Node *nn : m->ins) {
-                nn->val.copyFromHostToDevice();
+//                nn->val.copyFromHostToDevice();
             }
 #endif
             outs.push_back(n->val.value);
@@ -280,20 +294,31 @@ public:
         in_losses.reserve(count);
         for (Node *n : batch) {
             MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
-            m->loss.copyFromHostToDevice();
+            n3ldg_cuda::Assert(m->loss.verify("max pooling backward loss"));
+//            m->loss.copyFromHostToDevice();
             losses.push_back(m->loss.value);
             in_losses.push_back(m->dInLosses.value);
+#if TEST_CUDA
+            int in_i = 0;
+            for (Node *in : m->ins) {
+                n3ldg_cuda::Assert(in->loss.verify("max pooling backward in loss initial"));
+            }
+#endif
         }
         n3ldg_cuda::MaxPoolBackward(losses, hit_inputs.value, count, dim,
                 in_losses);
+
 //        profiler.EndCudaEvent();
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward();
         }
+
         for (int idx = 0; idx < count; idx++) {
-            n3ldg_cuda::Assert(batch[idx]->loss.verify(
-                        "max pooling backward"));
+            int in_i = 0;
+            for (Node *n : static_cast<MaxPoolNode*>(batch[idx])->ins) {
+                n3ldg_cuda::Assert(n->loss.verify("max pooling backward"));
+            }
         }
 #endif
     }

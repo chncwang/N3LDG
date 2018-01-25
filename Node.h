@@ -63,8 +63,10 @@ class Node {
 
   public:
     virtual inline void clearValue() {
+#if !USE_GPU || TEST_CUDA
         val = 0;
         loss = 0;
+#endif
         degree = 0;
         if (drop_value > 0)drop_mask = 1;
         parents.clear();
@@ -72,8 +74,13 @@ class Node {
 
     virtual inline void init(int ndim, dtype dropout) {
         dim = ndim;
+#if TEST_CUDA
         val.init(dim);
         loss.init(dim);
+#else
+        val.initOnDevice(dim);
+        loss.initOnDevice(dim);
+#endif
         drop_mask.init(dim);
         if (dropout > 0 && dropout <= 1) {
             drop_value = dropout;
@@ -182,5 +189,18 @@ class Execute {
 
 
 typedef  Execute* PExecute;
+
+#if USE_GPU
+void clearNodes(std::vector<Node*> &nodes, int dim) {
+    std::vector<dtype*> val_and_losses;
+    val_and_losses.reserve(2 * nodes.size());
+    for (Node *n : nodes) {
+        val_and_losses.push_back(n->val.value);
+        val_and_losses.push_back(n->loss.value);
+    }
+    n3ldg_cuda::BatchMemset(val_and_losses, val_and_losses.size(), dim,
+            0.0f);
+}
+#endif
 
 #endif

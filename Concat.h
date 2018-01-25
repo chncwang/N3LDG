@@ -313,7 +313,7 @@ class ConcatExecute : public Execute {
             ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
 #if TEST_CUDA
             for (int j = 0; j < inCount; ++j) {
-                n->ins[j]->val.copyFromHostToDevice();
+                //n->ins[j]->val.copyFromHostToDevice();
             }
 #endif
             ins.push_back(n->dInValues.value);
@@ -361,7 +361,7 @@ class ConcatExecute : public Execute {
             ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
 #if TEST_CUDA
             for (int j = 0; j < inCount; ++j) {
-                n->ins[j]->loss.copyFromHostToDevice();
+                //n->ins[j]->loss.copyFromHostToDevice();
             }
 #endif
             in_losses.push_back(n->dInLosses.value);
@@ -371,9 +371,9 @@ class ConcatExecute : public Execute {
         for (int i = 0; i < count; ++i) {
             ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
 #if TEST_CUDA
-            n->loss.copyFromHostToDevice();
+            //n->loss.copyFromHostToDevice();
             for (int j=0; j < inCount; ++j) {
-                n->ins[j]->loss.copyFromHostToDevice();
+                //n->ins[j]->loss.copyFromHostToDevice();
             }
 #endif
             out_losses.push_back(n->loss.value);

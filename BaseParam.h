@@ -31,6 +31,16 @@ struct BaseParam {
     virtual inline void rescaleGrad(dtype scale) = 0;
     virtual inline void save(std::ofstream &os)const = 0;
     virtual inline void load(std::ifstream &is) = 0;
+#if USE_GPU
+    virtual void copyFromHostToDevice() {
+        val.copyFromHostToDevice();
+        grad.copyFromHostToDevice();
+    }
+    virtual void copyFromDeviceToHost() {
+        val.copyFromDeviceToHost();
+        grad.copyFromDeviceToHost();
+    }
+#endif
 };
 
 #endif /* BasePARAM_H_ */

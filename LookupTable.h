@@ -300,12 +300,11 @@ public:
         //profiler.BeginEvent("lookup forward");
         int count = batch.size();
 #if TEST_CUDA
-        table->E.val.copyFromHostToDevice();
+        //table->E.val.copyFromHostToDevice();
 #endif
         if (bTrain && drop_factor > 0) {
 #if TEST_CUDA
             drop_mask.init(dim, count);
-            table->E.val.copyFromHostToDevice();
 #else
             drop_mask.initOnDevice(dim, count);
 #endif
@@ -355,12 +354,12 @@ public:
         for (Node *n : batch) {
             losses.push_back(n->loss.value);
 #if TEST_CUDA
-            n->loss.copyFromHostToDevice();
+            //n->loss.copyFromHostToDevice();
 #endif
         }
 #if TEST_CUDA
-        table->E.grad.copyFromHostToDevice();
-        table->E.dIndexers.copyFromHost(table->E.indexers.c_buf());
+        //table->E.grad.copyFromHostToDevice();
+        //table->E.dIndexers.copyFromHost(table->E.indexers.c_buf());
 #endif
         n3ldg_cuda::LookupBackward(xids, table->nUNKId, table->bFineTune,
                 losses,

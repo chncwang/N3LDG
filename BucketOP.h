@@ -27,8 +27,10 @@ class BucketNode : public Node {
   public:
     virtual inline void clearValue() {
         //Node::clearValue();
+#if !USE_GPU || TEST_CUDA
         loss = 0;
         degree = 0;
+#endif
         if (drop_value > 0)drop_mask = 1;
         parents.clear();
     }

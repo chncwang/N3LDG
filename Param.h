@@ -27,6 +27,9 @@ class Param : public BaseParam {
 
         dtype bound = sqrt(6.0 / (outDim + inDim + 1));
         val.random(bound);
+#if USE_GPU
+        val.copyFromHostToDevice();
+#endif
         iter = 0;
     }
 

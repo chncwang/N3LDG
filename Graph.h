@@ -13,6 +13,7 @@
 #include "Eigen/Dense"
 #include "Node.h"
 #include "MyLib.h"
+#include "profiler.h"
 
 using namespace Eigen;
 
@@ -95,6 +96,7 @@ class Graph {
 
     //real executation
     inline void compute() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         int free_count = free_nodes.size();
 
         while (free_count > 0) {

@@ -341,8 +341,8 @@ class UniExecute :public Execute {
 
 #if TEST_CUDA
 //        profiler.BeginEvent("copy between device and host");
-        param->W.val.copyFromHostToDevice();
-        param->b.val.copyFromHostToDevice();
+        //param->W.val.copyFromHostToDevice();
+        //param->b.val.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 #endif
 
@@ -351,7 +351,7 @@ class UniExecute :public Execute {
 
 #if TEST_CUDA
 //            profiler.BeginEvent("copy between device and host");
-            n->in->val.copyFromHostToDevice();
+            //n->in->val.copyFromHostToDevice();
 //            profiler.EndCudaEvent();
 #endif
 
@@ -395,16 +395,16 @@ class UniExecute :public Execute {
 
 #if TEST_CUDA
 //            profiler.BeginEvent("copy between device and host");
-            n->val.copyFromDeviceToHost();
+            //n->val.copyFromDeviceToHost();
 //            profiler.EndCudaEvent();
 #endif
         }
 
 #if TEST_CUDA
 //        profiler.BeginEvent("copy between device and host");
-        x.copyFromDeviceToHost();
-        y.copyFromDeviceToHost();
-        ty.copyFromDeviceToHost();
+        //x.copyFromDeviceToHost();
+        //y.copyFromDeviceToHost();
+        //ty.copyFromDeviceToHost();
 //        profiler.EndCudaEvent();
 #endif
 
@@ -513,7 +513,8 @@ class UniExecute :public Execute {
         for (int i = 0; i < count; ++i) {
             UniNode* ptr = (UniNode*)batch[i];
 #if TEST_CUDA
-            ptr->loss.copyFromHostToDevice();
+            n3ldg_cuda::Assert(ptr->loss.verify("uni backward loss"));
+//            ptr->loss.copyFromHostToDevice();
 #endif
             ly_vec.push_back(ptr->loss.value);
         }
@@ -523,7 +524,9 @@ class UniExecute :public Execute {
 //        profiler.EndCudaEvent();
 #if TEST_CUDA
 //        profiler.BeginEvent("copy");
-        param->W.grad.copyFromHostToDevice();
+        n3ldg_cuda::Assert(param->W.grad.verify(
+                    "uni backward W grad initial"));
+//          param->W.grad.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 #endif
 //        profiler.BeginEvent("cal W grad");
@@ -532,7 +535,8 @@ class UniExecute :public Execute {
 //        profiler.EndCudaEvent();
 #if TEST_CUDA
 //        profiler.BeginEvent("copy");
-        param->W.val.copyFromHostToDevice();
+        n3ldg_cuda::Assert(param->W.val.verify("uni W.val initial"));
+//        param->W.val.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 #endif
 //        profiler.BeginEvent("cal lx");
@@ -544,14 +548,17 @@ class UniExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
 #if TEST_CUDA
-            ptr->in->loss.copyFromHostToDevice();
+            n3ldg_cuda::Assert(ptr->in->loss.verify("uni backward in loss"));
+            //ptr->in->loss.copyFromHostToDevice();
 #endif
             losses.push_back(ptr->in->loss.value);
         }
 
 #if TEST_CUDA
 //        profiler.BeginEvent("copy");
-        param->b.grad.copyFromHostToDevice();
+        n3ldg_cuda::Assert(
+                param->b.grad.verify("uni backward param b initial"));
+        //param->b.grad.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 #endif
 //        profiler.BeginEvent("add bias and losses");
@@ -570,12 +577,12 @@ class UniExecute :public Execute {
             }
         }
 
-        assert(x.verify("backward x"));
+        n3ldg_cuda::Assert(x.verify("backward x"));
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
-        assert(lty.verify("backward lty"));
+        n3ldg_cuda::Assert(lty.verify("backward lty"));
 
         param->W.grad.mat() += lty.mat() * x.mat().transpose();
-        param->W.grad.verify("backward W grad");
+        n3ldg_cuda::Assert(param->W.grad.verify("backward W grad"));
 
         if (param->bUseB) {
             for (int idx = 0; idx < count; idx++) {
@@ -584,10 +591,10 @@ class UniExecute :public Execute {
                 }
             }
         }
-        param->b.grad.verify("backward b grad");
+        n3ldg_cuda::Assert(param->b.grad.verify("backward b grad"));
 
         lx.mat() += param->W.val.mat().transpose() * lty.mat();
-        lx.verify("backward lx");
+        n3ldg_cuda::Assert(lx.verify("backward lx"));
 
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -598,7 +605,7 @@ class UniExecute :public Execute {
 
         for (Node * n : batch) {
             UniNode *ptr = static_cast<UniNode *>(n);
-            ptr->in->loss.verify("backward loss");
+            n3ldg_cuda::Assert(ptr->in->loss.verify("uni backward loss"));
         }
 #endif
 #else
@@ -712,8 +719,8 @@ public:
 
 #if TEST_CUDA
 //        profiler.BeginEvent("copy from host to device");
-        param->W.val.copyFromHostToDevice();
-        param->b.val.copyFromHostToDevice();
+        //param->W.val.copyFromHostToDevice();
+        //param->b.val.copyFromHostToDevice();
 //        profiler.EndCudaEvent();
 #endif // TEST_CUDA
 
@@ -722,7 +729,7 @@ public:
 
 #if TEST_CUDA
 //            profiler.BeginEvent("copy between device and host");
-            n->in->val.copyFromHostToDevice();
+            //n->in->val.copyFromHostToDevice();
 //            profiler.EndCudaEvent();
 #endif // TEST_CUDA
 
