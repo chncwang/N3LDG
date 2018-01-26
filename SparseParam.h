@@ -120,8 +120,33 @@ class SparseParam : public BaseParam {
         idy = idCols[0];
     }
 
-    dtype squareGradNorm() {
-#if USE_GPU
+    dtype squareGradNorm() override {
+#if USE_GPU && !TEST_CUDA
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+//        profiler.BeginEvent("sparse SquareSum");
+        dtype result = n3ldg_cuda::SquareSum(grad.value, dIndexers.value,
+                indexers.size(), val.col);
+//        profiler.EndCudaEvent();
+        return result;
+#elif USE_GPU && TEST_CUDA
+        dtype sumNorm = 0.0;
+        int inDim = indexers.size();
+        for (int index = 0; index < inDim; index++) {
+            if (!indexers[index]) continue;
+            for (int idx = 0; idx < val.col; idx++) {
+                sumNorm += grad[index][idx] * grad[index][idx];
+            }
+        }
+
+        n3ldg_cuda::Assert(n3ldg_cuda::Verify(indexers.c_buf(),
+                    dIndexers.value,
+                    indexers.size(),
+                    "sparse squareGradNorm"));
+        dtype cuda = n3ldg_cuda::SquareSum(grad.value, dIndexers.value, inDim,
+                val.col);
+        n3ldg_cuda::Assert(isEqual(cuda, sumNorm));
+
+        return sumNorm;
 #else
         dtype sumNorm = 0.0;
         int inDim = indexers.size();
@@ -137,6 +162,21 @@ class SparseParam : public BaseParam {
     }
 
     inline void rescaleGrad(dtype scale) {
+#if USE_GPU
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("sparse rescaleGrad");
+        n3ldg_cuda::Rescale(grad.value, grad.size, scale);
+        profiler.EndCudaEvent();
+#if TEST_CUDA
+        int inDim = indexers.size();
+        for (int index = 0; index < inDim; index++) {
+            for (int idx = 0; idx < val.col; idx++) {
+                grad[index][idx] = grad[index][idx] * scale;
+            }
+        }
+        n3ldg_cuda::Assert(grad.verify("SparseParam rescaleGrad"));
+#endif
+#else
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
@@ -144,6 +184,7 @@ class SparseParam : public BaseParam {
                 grad[index][idx] = grad[index][idx] * scale;
             }
         }
+#endif
     }
 
     inline void value(const int& featId, Tensor1D& out) {

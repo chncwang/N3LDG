@@ -10,6 +10,9 @@
 
 #include "Eigen/Dense"
 #include "BaseParam.h"
+#if USE_GPU
+#include "n3ldg_cuda.h"
+#endif
 
 // Notice: aux is an auxiliary variable to help parameter updating
 class Param : public BaseParam {
@@ -51,12 +54,24 @@ class Param : public BaseParam {
         val.vec() = val.vec() - grad.vec() * alpha / (aux_square.vec() + eps).sqrt();
     }
 
-    inline void updateAdam(dtype belta1, dtype belta2, dtype alpha, dtype reg, dtype eps) {
+    void updateAdam(dtype belta1, dtype belta2, dtype alpha, dtype reg, dtype eps) {
+#if USE_GPU
+        n3ldg_cuda::UpdateAdam(val.value, grad.value, val.row, val.col,
+                aux_mean.value,
+                aux_square.value,
+                iter,
+                belta1,
+                belta2,
+                alpha,
+                reg,
+                eps);
+#else
         if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
         aux_mean.vec() = belta1 * aux_mean.vec() + (1 - belta1) * grad.vec();
         aux_square.vec() = belta2 * aux_square.vec() + (1 - belta2) * grad.vec().square();
         dtype lr_t = alpha * sqrt(1 - pow(belta2, iter + 1)) / (1 - pow(belta1, iter + 1));
         val.vec() = val.vec() - aux_mean.vec() * lr_t / (aux_square.vec() + eps).sqrt();
+#endif
         iter++;
     }
 
@@ -78,15 +93,36 @@ class Param : public BaseParam {
     }
 
     inline dtype squareGradNorm() {
+#if USE_GPU && !TEST_CUDA
+        return n3ldg_cuda::SquareSum(grad.value, grad.size);
+#elif USE_GPU && TEST_CUDA
+        n3ldg_cuda::Assert(grad.verify("squareGradNorm grad"));
+        dtype cuda = n3ldg_cuda::SquareSum(grad.value, grad.size);
+        dtype sumNorm = 0.0;
+        for (int i = 0; i < grad.size; i++) {
+            sumNorm += grad.v[i] * grad.v[i];
+        }
+        n3ldg_cuda::Assert(isEqual(sumNorm, cuda));
+        return sumNorm;
+#else
         dtype sumNorm = 0.0;
         for (int i = 0; i < grad.size; i++) {
             sumNorm += grad.v[i] * grad.v[i];
         }
         return sumNorm;
+#endif
     }
 
     inline void rescaleGrad(dtype scale) {
+#if USE_GPU
+        n3ldg_cuda::Rescale(grad.value, grad.size, scale);
+#if TEST_CUDA
         grad.vec() = grad.vec() * scale;
+        n3ldg_cuda::Assert(grad.verify("Param rescaleGrad"));
+#endif
+#else
+        grad.vec() = grad.vec() * scale;
+#endif
     }
 
     inline void save(std::ofstream &os)const {
