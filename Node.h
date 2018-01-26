@@ -52,14 +52,7 @@ class Node {
         drop_value = -1;
     }
 
-    virtual ~Node() {
-        val = 0;
-        loss = 0;
-        degree = 0;
-        parents.clear();
-        node_type.clear();
-    }
-
+    virtual ~Node() = default;
 
   public:
     virtual inline void clearValue() {

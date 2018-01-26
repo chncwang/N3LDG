@@ -80,10 +80,13 @@ class Graph {
     }
 
     inline void backward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("backward");
         int count = execs.size();
         for (int idx = count - 1; idx >= 0; idx--) {
             execs[idx]->backward();
         }
+        profiler.EndCudaEvent();
     }
 
     inline void addNode(PNode x) {
@@ -97,6 +100,7 @@ class Graph {
     //real executation
     inline void compute() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("compute");
         int free_count = free_nodes.size();
 
         while (free_count > 0) {
@@ -124,7 +128,9 @@ class Graph {
             //#pragma omp parallel for
             for (int idy = 0; idy < cur_execs_size; idy++) {
                 //std::cout << "batch size:" << cur_execs.at(idy)->batch.size() << std::endl;
+                profiler.BeginEvent("forward");
                 cur_execs[idy]->forward();
+                profiler.EndCudaEvent();
             }
 
             for (int idy = 0; idy < cur_execs_size; idy++) {
@@ -168,6 +174,7 @@ class Graph {
             std::cout << "unprocessed: " << unprocessed << std::endl;
             abort();
         }
+        profiler.EndCudaEvent();
     }
 
 };

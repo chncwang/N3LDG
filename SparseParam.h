@@ -120,7 +120,9 @@ class SparseParam : public BaseParam {
         idy = idCols[0];
     }
 
-    inline dtype squareGradNorm() {
+    dtype squareGradNorm() {
+#if USE_GPU
+#else
         dtype sumNorm = 0.0;
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
@@ -131,6 +133,7 @@ class SparseParam : public BaseParam {
         }
 
         return sumNorm;
+#endif
     }
 
     inline void rescaleGrad(dtype scale) {
