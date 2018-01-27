@@ -20,6 +20,7 @@ class SparseParam : public BaseParam {
     NRVec<int> last_update;
 #if USE_GPU
     n3ldg_cuda::BoolArray dIndexers;
+    n3ldg_cuda::IntArray dIters;
 
     void copyFromDeviceToHost() override {
         BaseParam::copyFromDeviceToHost();
@@ -48,10 +49,31 @@ class SparseParam : public BaseParam {
         last_update = 0;
 #if USE_GPU
         dIndexers.init(indexers.c_buf(), indexers.size());
+        dIters.init(last_update.c_buf(), last_update.size());
+        val.copyFromHostToDevice();
+        grad.copyFromHostToDevice();
+        aux_square.copyFromHostToDevice();
+        aux_mean.copyFromHostToDevice();
 #endif
     }
 
     inline void clearGrad() {
+#if USE_GPU
+        n3ldg_cuda::Memset(grad.value, grad.size, 0.0f);
+        n3ldg_cuda::Memset(dIndexers.value, grad.row, false);
+#if TEST_CUDA
+        int inDim = indexers.size();
+        for (int index = 0; index < inDim; index++) {
+            for (int idx = 0; idx < grad.col; idx++) {
+                grad[index][idx] = 0;
+            }
+        }
+        indexers = false;
+        n3ldg_cuda::Assert(grad.verify("SparseParam clearGrad"));
+        n3ldg_cuda::Assert(n3ldg_cuda::Verify(indexers.c_buf(),
+                    dIndexers.value, grad.row, "SparseParam indexers"));
+#endif
+#else
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
@@ -60,6 +82,7 @@ class SparseParam : public BaseParam {
             }
         }
         indexers = false;
+#endif
     }
 
     inline int outDim() {
@@ -83,6 +106,19 @@ class SparseParam : public BaseParam {
     }
 
     inline void updateAdam(dtype belta1, dtype belta2, dtype alpha, dtype reg, dtype eps) {
+#if USE_GPU
+        n3ldg_cuda::UpdateAdam(val.value, grad.value, indexers.size(),
+                grad.col,
+                aux_mean.value,
+                aux_square.value,
+                dIndexers.value,
+                dIters.value,
+                belta1,
+                belta2,
+                alpha,
+                reg,
+                eps);
+#if TEST_CUDA
         dtype lr_t;
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
@@ -96,6 +132,24 @@ class SparseParam : public BaseParam {
             }
             last_update[index]++;
         }
+
+        n3ldg_cuda::Assert(val.verify("SparseParam updateAdam"));
+#endif
+#else
+        dtype lr_t;
+        int inDim = indexers.size();
+        for (int index = 0; index < inDim; index++) {
+            if (!indexers[index]) continue;
+            for (int idx = 0; idx < grad.col; idx++) {
+                grad[index][idx] = grad[index][idx] + val[index][idx] * reg;
+                aux_mean[index][idx] = belta1 * aux_mean[index][idx] + (1 - belta1) * grad[index][idx];
+                aux_square[index][idx] = belta2 * aux_square[index][idx] + (1 - belta2) * grad[index][idx] * grad[index][idx];
+                lr_t = alpha * sqrt(1 - pow(belta2, last_update[index] + 1)) / (1 - pow(belta1, last_update[index] + 1));
+                val[index][idx] = val[index][idx] - aux_mean[index][idx] * lr_t / sqrt(aux_square[index][idx] + eps);
+            }
+            last_update[index]++;
+        }
+#endif
     }
 
     inline void randpoint(int& idx, int &idy) {
