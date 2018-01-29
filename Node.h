@@ -67,12 +67,16 @@ class Node {
 
     virtual inline void init(int ndim, dtype dropout) {
         dim = ndim;
-#if TEST_CUDA
+#if TEST_CUDA || !USE_GPU
         val.init(dim);
         loss.init(dim);
 #else
         val.initOnDevice(dim);
         loss.initOnDevice(dim);
+#endif
+#if USE_GPU
+        n3ldg_cuda::Memset(val.value, dim, 0.0f);
+        n3ldg_cuda::Memset(loss.value, dim, 0.0f);
 #endif
         drop_mask.init(dim);
         if (dropout > 0 && dropout <= 1) {
@@ -149,23 +153,39 @@ class Node {
 
 typedef  Node* PNode;
 
+#if USE_GPU
+void clearNodes(std::vector<Node*> &nodes, int dim) {
+    std::vector<dtype*> val_and_losses;
+    val_and_losses.reserve(2 * nodes.size());
+    for (Node *n : nodes) {
+        val_and_losses.push_back(n->val.value);
+        val_and_losses.push_back(n->loss.value);
+    }
+    n3ldg_cuda::BatchMemset(val_and_losses, val_and_losses.size(), dim,
+            0.0f);
+}
+#endif
 
 class Execute {
-  public:
+public:
     vector<PNode> batch;
     dtype drop_factor;
 
+    virtual ~Execute() = default;
+
   public:
-    virtual ~Execute() {
-        batch.clear();
+    virtual void forward() = 0;
+    virtual void backward() = 0;
+    virtual void clearValue() {
+        for (PNode p : batch) {
+            p->clearValue();
+        }
+#if USE_GPU
+        clearNodes(batch, batch.at(0)->dim);
+#endif
     }
 
-  public:
-    virtual inline void forward() = 0;
-    virtual inline void backward() = 0;
-
-
-    virtual inline bool addNode(PNode in) {
+    virtual bool addNode(PNode in) {
         if (batch.empty()) {
             std::cout << "empty batch, strange...." << std::endl;
             return false;
@@ -183,17 +203,5 @@ class Execute {
 
 typedef  Execute* PExecute;
 
-#if USE_GPU
-void clearNodes(std::vector<Node*> &nodes, int dim) {
-    std::vector<dtype*> val_and_losses;
-    val_and_losses.reserve(2 * nodes.size());
-    for (Node *n : nodes) {
-        val_and_losses.push_back(n->val.value);
-        val_and_losses.push_back(n->loss.value);
-    }
-    n3ldg_cuda::BatchMemset(val_and_losses, val_and_losses.size(), dim,
-            0.0f);
-}
-#endif
 
 #endif

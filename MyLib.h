@@ -777,8 +777,12 @@ bool isPunctuation(const std::string &text) {
 }
 
 bool isEqual(dtype a, dtype b) {
-	float c = a - b;
-	return c < 0.001 && c > -0.001;
+    float c = a - b;
+    if (c < 0.001 && c > -0.001) {
+        return true;
+    }
+    c = c / a;
+    return c < 0.001 && c > -0.001;
 }
 
 #define n3ldg_assert(assertion, message) \

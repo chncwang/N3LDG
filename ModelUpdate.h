@@ -104,6 +104,11 @@ class ModelUpdate {
         }
 
         updateAdam();
+#if TEST_CUDA
+        for (BaseParam *p : _params) {
+            p->copyFromHostToDevice();
+        }
+#endif
     }
 
     inline void rescaleGrad(dtype scale) {

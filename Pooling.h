@@ -115,8 +115,8 @@ public:
 #if !TEST_CUDA
     vector<PNode> ins;
 #endif
-    n3ldg_cuda::NumberPointerArray dInValues;
-    n3ldg_cuda::NumberPointerArray dInLosses;
+    n3ldg_cuda::PageLockedNumberPointerArray dInValues;
+    n3ldg_cuda::PageLockedNumberPointerArray dInLosses;
 
     MaxPoolNode() {
         node_type = "max-pooling";
@@ -179,6 +179,8 @@ public:
     }
 
     void initDeviceMembers() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("pool initDeviceMembers");
         std::vector<dtype*> values;
         values.reserve(ins.size());
         std::vector<dtype*> losses;
@@ -190,6 +192,7 @@ public:
 
         dInValues.init(values.data(), values.size());
         dInLosses.init(losses.data(), losses.size());
+        profiler.EndCudaEvent();
     }
 
     PExecute generate(bool bTrain, dtype cur_drop_factor) override;
@@ -268,7 +271,9 @@ public:
             in_counts.push_back(m->ins.size());
 #if TEST_CUDA
             for (Node *nn : m->ins) {
-//                nn->val.copyFromHostToDevice();
+                n3ldg_cuda::Assert(nn->val.verify(
+                            "max pooling forward input"));
+                nn->val.copyFromHostToDevice();
             }
 #endif
             outs.push_back(n->val.value);
@@ -280,6 +285,17 @@ public:
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
             n3ldg_cuda::Assert(batch[idx]->val.verify("max pooling forward"));
+            MaxPoolNode *n = static_cast<MaxPoolNode*>(batch[idx]);
+            if (!n3ldg_cuda::Verify(n->masks.data(),
+                        hit_inputs.value + idx * dim, dim,
+                        "max pooling forward mask")) {
+                for (int i = 0; i < 2; ++i) {
+                    std::cout << "i:" << i << std::endl;
+                    Node *p = n->ins.at(i);
+                    std::cout << n->ins.at(i)->val[37] << std::endl;
+                }
+                abort();
+            }
         }
 #endif
     }

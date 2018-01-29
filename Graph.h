@@ -14,6 +14,7 @@
 #include "Node.h"
 #include "MyLib.h"
 #include "profiler.h"
+#include <set>
 
 using namespace Eigen;
 
@@ -67,10 +68,30 @@ class Graph {
         }
         execs.clear();
 
-        count = nodes.size();
-        for (int idx = 0; idx < count; idx++) {
-            nodes[idx]->clearValue();
+        std::set<PNode> uncleared_nodes;
+        for (PNode p : nodes) {
+            uncleared_nodes.insert(p);
         }
+        while (!uncleared_nodes.empty()) {
+            PNode p = NULL;
+            PExecute cur_exec;
+            for (PNode pp : nodes) {
+                auto find = uncleared_nodes.find(pp);
+                if (p == NULL && find != uncleared_nodes.end()) {
+                    p = pp;
+                    cur_exec = p->generate(bTrain, -1);
+                    cur_exec->addNode(*find);
+                    uncleared_nodes.erase(find);
+                } else if (p != NULL && find != uncleared_nodes.end()) {
+                    if (p->typeEqual(*find)) {
+                        cur_exec->addNode(*find);
+                        uncleared_nodes.erase(find);
+                    }
+                }
+            }
+            cur_exec->clearValue();
+        }
+
         nodes.clear();
         free_nodes.clear();
         finish_nodes.clear();
@@ -86,7 +107,11 @@ class Graph {
         for (int idx = count - 1; idx >= 0; idx--) {
             execs[idx]->backward();
         }
+#if USE_GPU
         profiler.EndCudaEvent();
+#else
+        profiler.EndEvent();
+#endif
     }
 
     inline void addNode(PNode x) {
@@ -128,9 +153,7 @@ class Graph {
             //#pragma omp parallel for
             for (int idy = 0; idy < cur_execs_size; idy++) {
                 //std::cout << "batch size:" << cur_execs.at(idy)->batch.size() << std::endl;
-                profiler.BeginEvent("forward");
                 cur_execs[idy]->forward();
-                profiler.EndCudaEvent();
             }
 
             for (int idy = 0; idy < cur_execs_size; idy++) {
@@ -174,7 +197,11 @@ class Graph {
             std::cout << "unprocessed: " << unprocessed << std::endl;
             abort();
         }
+#if USE_GPU
         profiler.EndCudaEvent();
+#else
+        profiler.EndEvent();
+#endif
     }
 
 };

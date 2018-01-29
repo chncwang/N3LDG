@@ -23,9 +23,9 @@ public:
     vector<int> inDims;
     vector<PNode> ins;
 #if USE_GPU
-    n3ldg_cuda::IntArray dInOffsets;
-    n3ldg_cuda::NumberPointerArray dInValues;
-    n3ldg_cuda::NumberPointerArray dInLosses;
+    n3ldg_cuda::PageLockedIntArray dInOffsets;
+    n3ldg_cuda::PageLockedNumberPointerArray dInValues;
+    n3ldg_cuda::PageLockedNumberPointerArray dInLosses;
 #endif
 
     ConcatNode() : Node() {
@@ -36,25 +36,36 @@ public:
 
 #if USE_GPU
     void initDeviceMembers() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+//        profiler.BeginEvent("ConcatNode initDeviceMembers");
+//        profiler.BeginEvent("initDeviceMembers inoffsets");
         std::vector<int> inOffsets;
         inOffsets.resize(ins.size());
         inOffsets.at(0) = 0;
         for (int i = 1; i < ins.size(); ++i) {
             inOffsets.at(i) = inOffsets.at(i - 1) + ins.at(i - 1)->dim;
         }
+//        profiler.EndEvent();
 
         dInOffsets.init(inOffsets.data(), inDims.size());
+//        profiler.BeginEvent("initDeviceMembers vals");
         std::vector<dtype*> vals;
         for (PNode p : ins) {
             vals.push_back(p->val.value);
         }
+//        profiler.EndEvent();
         dInValues.init(vals.data(), ins.size());
 
+//        profiler.BeginEvent("initDeviceMembers losses");
         std::vector<dtype*> losses;
+        losses.reserve(ins.size());
         for (PNode p : ins) {
             losses.push_back(p->loss.value);
         }
+//        profiler.EndEvent();
         dInLosses.init(losses.data(), losses.size());
+
+//        profiler.EndCudaEvent();
     }
 #endif
 

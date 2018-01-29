@@ -130,7 +130,10 @@ class Param : public BaseParam {
         for (int i = 0; i < grad.size; i++) {
             sumNorm += grad.v[i] * grad.v[i];
         }
-        n3ldg_cuda::Assert(isEqual(sumNorm, cuda));
+        if (!isEqual(sumNorm, cuda)) {
+            std::cout << "cpu:" << sumNorm << " cuda:" << cuda << std::endl;
+            abort();
+        }
         return sumNorm;
 #else
         dtype sumNorm = 0.0;

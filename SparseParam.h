@@ -218,9 +218,9 @@ class SparseParam : public BaseParam {
     inline void rescaleGrad(dtype scale) {
 #if USE_GPU
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("sparse rescaleGrad");
+//        profiler.BeginEvent("sparse rescaleGrad");
         n3ldg_cuda::Rescale(grad.value, grad.size, scale);
-        profiler.EndCudaEvent();
+//        profiler.EndCudaEvent();
 #if TEST_CUDA
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {

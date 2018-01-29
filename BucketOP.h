@@ -94,9 +94,9 @@ class BucketExecute : public Execute {
   public:
     bool bTrain;
   public:
-    void  forward() {}
+    void  forward() override {}
 
-    void backward() {}
+    void backward() override {}
 };
 
 #else
