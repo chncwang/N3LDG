@@ -421,6 +421,7 @@ class UniExecute :public Execute {
                 }
             }
         }
+        n3ldg_cuda::Assert(x.verify("forward x"));
 
         ty.mat() = param->W.val.mat() * x.mat();
 
@@ -448,12 +449,11 @@ class UniExecute :public Execute {
         for (int i = 0; i < count; ++i) {
             dtype drop_value = batch[0]->drop_value;
             batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
-            batch[i]->val.verify("forward batch i val");
+            n3ldg_cuda::Assert(batch[i]->val.verify("forward batch i val"));
         }
 
-        x.verify("forward x");
-        ty.verify("forward ty");
-        y.verify("forward y");
+        n3ldg_cuda::Assert(ty.verify("forward ty"));
+        n3ldg_cuda::Assert(y.verify("forward y"));
 #endif
 #else
         for (int idx = 0; idx < count; idx++) {
