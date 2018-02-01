@@ -25,6 +25,69 @@ using n3ldg_cpu::Tensor2D;
 
 class Execute;
 
+#if USE_GPU
+struct NodeInfo {
+    dtype *val;
+    dtype *loss;
+    std::vector<dtype *> input_vals;
+    std::vector<dtype *> input_losses;
+    std::vector<int> offsets;
+
+    NodeInfo() = default;
+    NodeInfo(const NodeInfo &) = default;
+    NodeInfo(NodeInfo &&) = default;
+};
+
+int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
+        void *memory, std::vector<int> &offsets, int size) {
+    assert(offsets.empty());
+    int offset = 0;
+    char *m = (char*)memory;
+    for (const std::vector<NodeInfo> &vec : graph) {
+        offsets.push_back(offset);
+        for (const NodeInfo &node_info : vec) {
+            *(dtype**)(m + offset) = node_info.val;
+            offset += sizeof(node_info.val);
+        }
+        for (const NodeInfo &node_info : vec) {
+            *(dtype**)(m + offset) = node_info.loss;
+            offset += sizeof(node_info.loss);
+        }
+        for (const NodeInfo &node_info : vec) {
+            if (!node_info.input_vals.empty()) {
+                int len = node_info.input_vals.size() *
+                        sizeof(node_info.input_vals.at(0));
+                memcpy((void*)(m + offset), node_info.input_vals.data(), len);
+                offset += len;
+            }
+        }
+        for (const NodeInfo &node_info : vec) {
+            if (!node_info.input_losses.empty()) {
+                int len = node_info.input_losses.size() *
+                        sizeof(node_info.input_losses.at(0));
+                memcpy((void*)(m + offset),
+                        node_info.input_losses.data(), len);
+                offset += len;
+            }
+        }
+        const NodeInfo &node_info = vec.at(0);
+        if (!node_info.offsets.empty()) {
+            int len = node_info.offsets.size() *
+                    sizeof(node_info.offsets.at(0));
+            memcpy((void*)(m + offset), node_info.offsets.data(), len);
+            offset += len;
+        }
+    }
+    if (offset > size) {
+        std::cout << "actual_size is " << offset <<
+            " but allocated size is " << size << std::endl;
+        abort();
+    }
+    return offset;
+}
+
+#endif
+
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
 class Node {
@@ -41,7 +104,6 @@ class Node {
   public:
     Tensor1D drop_mask;
     dtype drop_value;
-
 
   public:
     Node() {
@@ -148,10 +210,16 @@ class Node {
         }
     }
 
-
+#if USE_GPU
+    virtual void toNodeInfo(NodeInfo &node_info) const {
+        node_info.val = val.value;
+        node_info.loss = loss.value;
+    }
+#endif
 };
 
 typedef  Node* PNode;
+
 
 #if USE_GPU
 void clearNodes(std::vector<Node*> &nodes, int dim) {
@@ -170,6 +238,10 @@ class Execute {
 public:
     vector<PNode> batch;
     dtype drop_factor;
+#if USE_GPU
+    void *graph_info;
+    int offset;
+#endif
 
     virtual ~Execute() = default;
 

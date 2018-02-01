@@ -15,9 +15,24 @@
 #include "MyLib.h"
 #include "profiler.h"
 #include <set>
+#include <map>
 
 using namespace Eigen;
 
+int GetDegree(std::map<void*, int> &degree_map, PNode p) {
+    auto it = degree_map.find(p);
+    if (it == degree_map.end()) {
+        degree_map.insert(std::pair<void*, int>(p, p->degree));
+    } else {
+        return it->second;
+    }
+}
+
+void DecreaseDegree(std::map<void*, int> &degree_map, PNode p) {
+    auto it = degree_map.find(p);
+    assert(it != degree_map.end());
+    --it->second;
+}
 
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
@@ -32,6 +47,10 @@ class Graph {
   public:
     bool train;
     dtype drop_factor;
+#if USE_GPU
+    void *host_memory = NULL;
+    void *device_memory = NULL;
+#endif
 
   public:
     Graph() {
@@ -123,10 +142,28 @@ class Graph {
     }
 
     //real executation
-    inline void compute() {
+    void compute() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         profiler.BeginEvent("compute");
+
+        if (host_memory == NULL) {
+            host_memory = n3ldg_cuda::GraphHostAlloc();
+        }
+        if (device_memory == NULL) {
+            device_memory = n3ldg_cuda::Malloc(10000000);
+        }
+#if USE_GPU
+        std::vector<std::vector<NodeInfo>> graph_node_info;
+        computeNodeInfo(graph_node_info);
+        std::vector<int> offsets;
+        int actual_size = GraphToMemory(graph_node_info, host_memory, offsets,
+                10000000);
+        n3ldg_cuda::Memcpy(device_memory, host_memory, actual_size,
+                cudaMemcpyDeviceToHost);
+#endif
+
         int free_count = free_nodes.size();
+        int step = 0;
 
         while (free_count > 0) {
             vector<PExecute> cur_execs;
@@ -143,6 +180,8 @@ class Graph {
 
                 if (!find) {
                     PExecute new_exec = free_nodes[idx]->generate(train, drop_factor);
+                    new_exec->graph_info = device_memory;
+                    new_exec->offset = offsets.at(step);
                     cur_execs.push_back(new_exec);
                     cur_execs_size++;
                 }
@@ -153,7 +192,7 @@ class Graph {
             //#pragma omp parallel for
             for (int idy = 0; idy < cur_execs_size; idy++) {
                 //std::cout << "batch size:" << cur_execs.at(idy)->batch.size() << std::endl;
-                cur_execs[idy]->forward();
+                //cur_execs[idy]->forward(); TODO
             }
 
             for (int idy = 0; idy < cur_execs_size; idy++) {
@@ -181,6 +220,7 @@ class Graph {
                 free_nodes.push_back(new_free_nodes[idx]);
             }
 
+            ++step;
         }
 
         if (finish_nodes.size() != all_nodes.size()) {
@@ -204,9 +244,91 @@ class Graph {
 #endif
     }
 
+    void computeNodeInfo(std::vector<std::vector<NodeInfo>> &graph_node_info) const {
+        assert(graph_node_info.empty());
+
+        std::map<void *, int> degree_map;
+        std::vector<PNode> copied_free_nodes = free_nodes;
+        std::vector<PNode> copied_finished_nodes = finish_nodes;
+        int free_count = copied_free_nodes.size();
+
+        while (free_count > 0) {
+            vector<PExecute> cur_execs;
+            int cur_execs_size = 0;
+
+            for (int idx = 0; idx < free_count; idx++) {
+                bool find = false;
+                for (int idy = 0; idy < cur_execs_size; idy++) {
+                    if (cur_execs[idy]->addNode(copied_free_nodes[idx])) {
+                        find = true;
+                        break;
+                    }
+                }
+
+                if (!find) {
+                    PExecute new_exec = copied_free_nodes[idx]->generate(train, drop_factor);
+                    cur_execs.push_back(new_exec);
+                    cur_execs_size++;
+                }
+
+            }
+
+            for (int idy = 0; idy < cur_execs_size; idy++) {
+                std::vector<NodeInfo> node_info_vec;
+                for (PNode p : cur_execs.at(idy)->batch) {
+                    NodeInfo info;
+                    p->toNodeInfo(info);
+                    node_info_vec.push_back(std::move(info));
+                }
+                graph_node_info.push_back(std::move(node_info_vec));
+            }
+
+            for (int idy = 0; idy < cur_execs_size; idy++) {
+                delete cur_execs.at(idy);
+            }
+
+            //finished nodes
+            vector<PNode> new_free_nodes;
+            for (int idx = 0; idx < free_count; idx++) {
+                copied_finished_nodes.push_back(copied_free_nodes[idx]);
+                int parent_count = copied_free_nodes[idx]->parents.size();
+                for (int idy = 0; idy < parent_count; idy++) {
+                    assert(GetDegree(degree_map,
+                                copied_free_nodes[idx]->parents[idy]) > 0);
+                    DecreaseDegree(degree_map,
+                            copied_free_nodes[idx]->parents[idy]);
+                    if (GetDegree(degree_map,
+                                copied_free_nodes[idx]->parents[idy]) == 0) {
+                        new_free_nodes.push_back(
+                                copied_free_nodes[idx]->parents[idy]);
+                    }
+                }
+            }
+
+            // update free nodes
+            copied_free_nodes.clear();
+            free_count = new_free_nodes.size();
+            for (int idx = 0; idx < free_count; idx++) {
+                copied_free_nodes.push_back(new_free_nodes[idx]);
+            }
+        }
+
+        if (copied_finished_nodes.size() != all_nodes.size()) {
+            std::cout << "computeNodeInfo error: several nodes are not executed, finished: " << finish_nodes.size() << ", all: " << all_nodes.size() << std::endl;
+            int total_node_num = all_nodes.size();
+            int unprocessed = 0;
+            for (int idx = 0; idx < total_node_num; idx++) {
+                PNode curNode = all_nodes[idx];
+                if (GetDegree(degree_map, curNode) >= 0) {
+                    curNode->typeEqual(all_nodes[0]);
+                    unprocessed++;
+                }
+            }
+            std::cout << "unprocessed: " << unprocessed << std::endl;
+            abort();
+        }
+    }
 };
-
-
 
 
 // one very useful function to collect pointers of derived nodes

@@ -22,11 +22,6 @@ class ConcatNode : public Node {
 public:
     vector<int> inDims;
     vector<PNode> ins;
-#if USE_GPU
-    n3ldg_cuda::PageLockedIntArray dInOffsets;
-    n3ldg_cuda::PageLockedNumberPointerArray dInValues;
-    n3ldg_cuda::PageLockedNumberPointerArray dInLosses;
-#endif
 
     ConcatNode() : Node() {
         inDims.clear();
@@ -35,37 +30,14 @@ public:
     }
 
 #if USE_GPU
-    void initDeviceMembers() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("ConcatNode initDeviceMembers");
-//        profiler.BeginEvent("initDeviceMembers inoffsets");
-        std::vector<int> inOffsets;
-        inOffsets.resize(ins.size());
-        inOffsets.at(0) = 0;
-        for (int i = 1; i < ins.size(); ++i) {
-            inOffsets.at(i) = inOffsets.at(i - 1) + ins.at(i - 1)->dim;
-        }
-//        profiler.EndEvent();
-
-        dInOffsets.init(inOffsets.data(), inDims.size());
-//        profiler.BeginEvent("initDeviceMembers vals");
-        std::vector<dtype*> vals;
+    void toNodeInfo(NodeInfo &info) const override {
+        int offset = 0;
         for (PNode p : ins) {
-            vals.push_back(p->val.value);
+            info.input_vals.push_back(p->val.value);
+            info.input_losses.push_back(p->loss.value);
+            info.offsets.push_back(offset);
+            offset += p->dim;
         }
-//        profiler.EndEvent();
-        dInValues.init(vals.data(), ins.size());
-
-//        profiler.BeginEvent("initDeviceMembers losses");
-        std::vector<dtype*> losses;
-        losses.reserve(ins.size());
-        for (PNode p : ins) {
-            losses.push_back(p->loss.value);
-        }
-//        profiler.EndEvent();
-        dInLosses.init(losses.data(), losses.size());
-
-//        profiler.EndCudaEvent();
     }
 #endif
 
@@ -95,10 +67,6 @@ public:
             std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
             abort();
         }
-
-#if USE_GPU
-        initDeviceMembers();
-#endif
         cg->addNode(this);
     }
 
@@ -121,10 +89,6 @@ public:
             abort();
         }
 
-#if USE_GPU
-        initDeviceMembers();
-#endif
-
         cg->addNode(this);
     }
 
@@ -138,9 +102,6 @@ public:
             ins[i]->addParent(this);
         }
 
-#if USE_GPU
-        initDeviceMembers();
-#endif
         cg->addNode(this);
     }
 
@@ -165,9 +126,6 @@ public:
             std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
             abort();
         }
-#if USE_GPU
-        initDeviceMembers();
-#endif
         cg->addNode(this);
     }
 
@@ -183,9 +141,6 @@ public:
             ins[i]->addParent(this);
         }
 
-#if USE_GPU
-        initDeviceMembers();
-#endif
         cg->addNode(this);
     }
 
@@ -212,9 +167,6 @@ public:
             abort();
         }
 
-#if USE_GPU
-        initDeviceMembers();
-#endif
         cg->addNode(this);
     }
 
@@ -242,9 +194,6 @@ public:
             abort();
         }
 
-#if USE_GPU
-        initDeviceMembers();
-#endif
         cg->addNode(this);
     }
 
@@ -327,7 +276,7 @@ class ConcatExecute : public Execute {
                 //n->ins[j]->val.copyFromHostToDevice();
             }
 #endif
-            ins.push_back(n->dInValues.value);
+            //ins.push_back(n->dInValues.value); TODO
         }
         std::vector<dtype*> outs;
         outs.reserve(count);
@@ -375,7 +324,7 @@ class ConcatExecute : public Execute {
                 //n->ins[j]->loss.copyFromHostToDevice();
             }
 #endif
-            in_losses.push_back(n->dInLosses.value);
+            //in_losses.push_back(n->dInLosses.value); // TODO
         }
         std::vector<dtype*> out_losses;
         out_losses.reserve(count);
@@ -447,7 +396,7 @@ inline PExecute ConcatNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->drop_factor = cur_drop_factor * drop_value;
 #if USE_GPU
     exec->inCount = this->ins.size();
-    exec->inOffsets = this->dInOffsets.value;
+    //exec->inOffsets = this->dInOffsets.value; TODO
     exec->outDim = 0;
     for (int d : inDims) {
         exec->outDim += d;
