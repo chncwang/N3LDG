@@ -31,12 +31,11 @@ public:
 
 #if USE_GPU
     void toNodeInfo(NodeInfo &info) const override {
-        int offset = 0;
+        Node::toNodeInfo(info);
         for (PNode p : ins) {
             info.input_vals.push_back(p->val.value);
             info.input_losses.push_back(p->loss.value);
-            info.offsets.push_back(offset);
-            offset += p->dim;
+            info.input_dims.push_back(p->dim);
         }
     }
 #endif
@@ -249,7 +248,6 @@ class ConcatExecute : public Execute {
   public:
     bool bTrain;
     int outDim;
-    int *inOffsets;
     int inCount;
     Tensor2D drop_mask;
   public:
@@ -267,27 +265,9 @@ class ConcatExecute : public Execute {
             n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
                     drop_mask.value);
         }
-        std::vector<dtype**> ins;
-        ins.reserve(count);
-        for (int i = 0; i < count; ++i) {
-            ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
-#if TEST_CUDA
-            for (int j = 0; j < inCount; ++j) {
-                //n->ins[j]->val.copyFromHostToDevice();
-            }
-#endif
-            //ins.push_back(n->dInValues.value); TODO
-        }
-        std::vector<dtype*> outs;
-        outs.reserve(count);
-        for (int i = 0; i < count; ++i) {
-            ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
-            assert(n->val.value != NULL);
-            outs.push_back(n->val.value);
-        }
 //        profiler.BeginEvent("ConcatForward");
-        n3ldg_cuda::ConcatForward(ins, inOffsets, drop_mask.value, drop_factor,
-                outs, count, inCount, outDim);
+        n3ldg_cuda::ConcatForward(graph_info, drop_mask.value, drop_factor,
+            count, inCount, outDim);
 //        profiler.EndCudaEvent();
 #if TEST_CUDA
         if (drop_factor > 0) {
@@ -339,8 +319,8 @@ class ConcatExecute : public Execute {
             out_losses.push_back(n->loss.value);
         }
 
-        n3ldg_cuda::ConcatBackward(out_losses, inOffsets, drop_mask.value,
-                drop_factor, in_losses, count, inCount, outDim);
+        n3ldg_cuda::ConcatBackward(this->graph_info, drop_mask.value,
+                drop_factor, count, inCount, outDim);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             if (drop_factor > 0) {
@@ -396,7 +376,6 @@ inline PExecute ConcatNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->drop_factor = cur_drop_factor * drop_value;
 #if USE_GPU
     exec->inCount = this->ins.size();
-    //exec->inOffsets = this->dInOffsets.value; TODO
     exec->outDim = 0;
     for (int d : inDims) {
         exec->outDim += d;

@@ -20,18 +20,24 @@
 using namespace Eigen;
 
 int GetDegree(std::map<void*, int> &degree_map, PNode p) {
-    auto it = degree_map.find(p);
+    std::cout << "GetDegree begin" << std::endl;
+    const auto &it = degree_map.find(p);
     if (it == degree_map.end()) {
         degree_map.insert(std::pair<void*, int>(p, p->degree));
+        std::cout << "not find GetDegree end" << std::endl;
+        return p->degree;
     } else {
+        std::cout << "find GetDegree end" << std::endl;
         return it->second;
     }
 }
 
 void DecreaseDegree(std::map<void*, int> &degree_map, PNode p) {
+    std::cout << "DecreaseDegree begin" << std::endl;
     auto it = degree_map.find(p);
     assert(it != degree_map.end());
-    --it->second;
+    --(it->second);
+    std::cout << "DecreaseDegree end" << std::endl;
 }
 
 // one Node means a vector
@@ -159,7 +165,7 @@ class Graph {
         int actual_size = GraphToMemory(graph_node_info, host_memory, offsets,
                 10000000);
         n3ldg_cuda::Memcpy(device_memory, host_memory, actual_size,
-                cudaMemcpyDeviceToHost);
+                cudaMemcpyHostToDevice);
 #endif
 
         int free_count = free_nodes.size();
@@ -179,9 +185,10 @@ class Graph {
                 }
 
                 if (!find) {
-                    PExecute new_exec = free_nodes[idx]->generate(train, drop_factor);
-                    new_exec->graph_info = device_memory;
-                    new_exec->offset = offsets.at(step);
+                    PExecute new_exec = free_nodes[idx]->generate(train,
+                            drop_factor);
+                    new_exec->graph_info = (char*)device_memory +
+                        offsets.at(step++);
                     cur_execs.push_back(new_exec);
                     cur_execs_size++;
                 }
@@ -192,7 +199,7 @@ class Graph {
             //#pragma omp parallel for
             for (int idy = 0; idy < cur_execs_size; idy++) {
                 //std::cout << "batch size:" << cur_execs.at(idy)->batch.size() << std::endl;
-                //cur_execs[idy]->forward(); TODO
+                cur_execs[idy]->forward();
             }
 
             for (int idy = 0; idy < cur_execs_size; idy++) {
@@ -219,8 +226,6 @@ class Graph {
             for (int idx = 0; idx < free_count; idx++) {
                 free_nodes.push_back(new_free_nodes[idx]);
             }
-
-            ++step;
         }
 
         if (finish_nodes.size() != all_nodes.size()) {
@@ -245,6 +250,7 @@ class Graph {
     }
 
     void computeNodeInfo(std::vector<std::vector<NodeInfo>> &graph_node_info) const {
+        std::cout << "computeNodeInfo begin" << std::endl;
         assert(graph_node_info.empty());
 
         std::map<void *, int> degree_map;
@@ -293,14 +299,20 @@ class Graph {
                 copied_finished_nodes.push_back(copied_free_nodes[idx]);
                 int parent_count = copied_free_nodes[idx]->parents.size();
                 for (int idy = 0; idy < parent_count; idy++) {
+                    std::cout << "assert before" << std::endl;
                     assert(GetDegree(degree_map,
                                 copied_free_nodes[idx]->parents[idy]) > 0);
+                    std::cout << "assert after" << std::endl;
                     DecreaseDegree(degree_map,
                             copied_free_nodes[idx]->parents[idy]);
                     if (GetDegree(degree_map,
                                 copied_free_nodes[idx]->parents[idy]) == 0) {
+                        std::cout << "new_free_nodes push_back before" <<
+                            std::endl;
                         new_free_nodes.push_back(
                                 copied_free_nodes[idx]->parents[idy]);
+                        std::cout << "new_free_nodes push_back after" <<
+                            std::endl;
                     }
                 }
             }

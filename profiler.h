@@ -16,8 +16,8 @@ struct Event {
     int count;
     float total_time_in_nanoseconds;
 
-    Event(std::string &&name, int count, float total_time_in_nanoseconds) {
-        this->name = std::move(name);
+    Event(const std::string &name, int count, float total_time_in_nanoseconds) {
+        this->name = name;
         this->count = count;
         this->total_time_in_nanoseconds = total_time_in_nanoseconds;
     }
@@ -58,6 +58,7 @@ public:
     }
 
     void EndEvent() {
+        assert(!running_events_.empty());
         Elapsed &top = running_events_.top();
         top.end = std::chrono::high_resolution_clock::now();
         std::string name = top.name;
@@ -65,7 +66,7 @@ public:
                 top.end - top.begin).count();
         auto it = event_map_.find(top.name);
         if (it == event_map_.end()) {
-            Event event(std::move(top.name), 1, time);
+            Event event(top.name, 1, time);
             event_map_.insert(std::make_pair(event.name, event));
         } else {
             Event &event = it->second;

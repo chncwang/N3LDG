@@ -12,7 +12,7 @@
 *  Created on: Apr 21, 2017
 *      Author: mszhang
 */
-
+#include <iomanip>
 #include "MyTensor.h"
 #if USE_GPU
 #include "n3ldg_cuda.h"
@@ -31,7 +31,7 @@ struct NodeInfo {
     dtype *loss;
     std::vector<dtype *> input_vals;
     std::vector<dtype *> input_losses;
-    std::vector<int> offsets;
+    std::vector<int32_t> input_dims;
 
     NodeInfo() = default;
     NodeInfo(const NodeInfo &) = default;
@@ -71,10 +71,10 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
             }
         }
         const NodeInfo &node_info = vec.at(0);
-        if (!node_info.offsets.empty()) {
-            int len = node_info.offsets.size() *
-                    sizeof(node_info.offsets.at(0));
-            memcpy((void*)(m + offset), node_info.offsets.data(), len);
+        if (!node_info.input_dims.empty()) {
+            int len = node_info.input_dims.size() *
+                    sizeof(node_info.input_dims.at(0));
+            memcpy((void*)(m + offset), node_info.input_dims.data(), len);
             offset += len;
         }
     }
@@ -83,6 +83,60 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
             " but allocated size is " << size << std::endl;
         abort();
     }
+
+//    std::cout << "graph size:" << offset << std::endl;
+//    int i = 0;
+//    for (int i = 0; i < offsets.size(); ++i) {
+//        int offset = offsets.at(i);
+//        std::cout << "offset:" << offset << std::endl;
+//        char *m = (char*)memory + offset;
+//        std::cout << "val:" << std::endl;
+//        for (int j = 0; j < graph.at(i).size(); ++j) {
+//            std::cout << "memory:" << *(dtype**)(m + j * sizeof(dtype*)) <<
+//                " node:" << graph.at(i).at(j).val << std::endl;
+//        }
+//        m += graph.at(i).size() * sizeof(dtype*);
+//        std::cout << "loss:" << std::endl;
+//        for (int j = 0; j < graph.at(i).size(); ++j) {
+//            std::cout << "memory:" << *(dtype**)(m + j * sizeof(dtype*)) <<
+//                " node:" << graph.at(i).at(j).loss << std::endl;
+//        }
+//        m += graph.at(i).size() * sizeof(dtype*);
+
+//        std::cout << "input val:" << std::endl;
+//        int input_size = graph.at(i).at(0).input_vals.size();
+//        for (int j = 0; j < graph.at(i).size(); ++j) {
+//            for (int k = 0; k < input_size; ++k) {
+//                std::cout << "memory:" <<
+//                    *(dtype**)(m + (j * input_size + k) * sizeof(dtype*))
+//                    << " node:" << graph.at(i).at(j).input_vals.at(k) <<
+//                    std::endl;
+//            }
+//        }
+//        m += input_size * graph.at(i).size() * sizeof(dtype*);
+
+//        std::cout << "input loss:" << std::endl;
+//        input_size = graph.at(i).at(0).input_losses.size();
+//        for (int j = 0; j < graph.at(i).size(); ++j) {
+//            for (int k = 0; k < input_size; ++k) {
+//                std::cout << "memory:" <<
+//                    *(dtype**)(m + (j * input_size + k) * sizeof(dtype*))
+//                    << " node:" << graph.at(i).at(j).input_losses.at(k) <<
+//                    std::endl;
+//            }
+//        }
+//        m += input_size * graph.at(i).size() * sizeof(dtype*);
+
+//        std::cout << "input dim:" << std::endl;
+//        input_size = graph.at(i).at(0).input_dims.size();
+//        for (int k = 0; k < input_size; ++k) {
+//            std::cout << "memory:" <<
+//                *(int*)(m + k * sizeof(int32_t))
+//                << " node:" << graph.at(i).at(0).input_dims.at(k) <<
+//                std::endl;
+//        }
+//    }
+
     return offset;
 }
 
@@ -240,7 +294,6 @@ public:
     dtype drop_factor;
 #if USE_GPU
     void *graph_info;
-    int offset;
 #endif
 
     virtual ~Execute() = default;
