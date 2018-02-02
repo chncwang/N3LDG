@@ -15,7 +15,6 @@
 #include "Node.h"
 #include "Graph.h"
 #include "ModelUpdate.h"
-#include "profiler.h"
 #include <cstdlib>
 
 class UniParams {
@@ -320,11 +319,7 @@ class UniExecute :public Execute {
     bool bTrain;
 
     inline void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("forward");
         int count = batch.size();
-
-//        profiler.BeginEvent("init");
 #if USE_GPU
 #if TEST_CUDA
         ty.init(outDim, count);
@@ -332,13 +327,11 @@ class UniExecute :public Execute {
         y.init(outDim, count);
         drop_mask.init(outDim, count);
         b.init(outDim, count);
-//        profiler.EndEvent();
 #else
         ty.initOnDevice(outDim, count);
         x.initOnDevice(inDim, count);
         y.initOnDevice(outDim, count);
         drop_mask.initOnDevice(outDim, count);
-//        profiler.EndCudaEvent();
 #endif
 #else
         ty.init(outDim, count);
@@ -346,7 +339,6 @@ class UniExecute :public Execute {
         y.init(outDim, count);
         drop_mask.init(outDim, count);
         b.init(outDim, count);
-//        profiler.EndEvent();
 #endif
 
 #if USE_GPU
@@ -355,75 +347,56 @@ class UniExecute :public Execute {
         ys.reserve(batch.size());
 
 #if TEST_CUDA
-//        profiler.BeginEvent("copy between device and host");
         //param->W.val.copyFromHostToDevice();
         //param->b.val.copyFromHostToDevice();
-//        profiler.EndCudaEvent();
 #endif
 
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
 
 #if TEST_CUDA
-//            profiler.BeginEvent("copy between device and host");
             //n->in->val.copyFromHostToDevice();
-//            profiler.EndCudaEvent();
 #endif
 
-//            profiler.BeginEvent("vector push_back");
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
-//            profiler.EndEvent();
         }
 
-//        profiler.BeginEvent("CopyForUniNodeForward");
         n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
                 ty.value,
                 count,
                 inDim,
                 outDim);
-//        profiler.EndCudaEvent();
 
-//        profiler.BeginEvent("MatrixMultiplyMatrix");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
                 ty.value,
                 outDim,
                 inDim,
                 count,
                 param->bUseB);
-//        profiler.EndCudaEvent();
 
-//        profiler.BeginEvent("dropout mask");
         if (bTrain) {
             n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
                     drop_mask.value);
         }
-//        profiler.EndCudaEvent();
 
-//        profiler.BeginEvent("Tanh");
         n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim, bTrain, drop_factor,
                 drop_mask.value);
-//        profiler.EndCudaEvent();
 
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
 
 #if TEST_CUDA
-//            profiler.BeginEvent("copy between device and host");
             //n->val.copyFromDeviceToHost();
-//            profiler.EndCudaEvent();
 #endif
         }
 
 #if TEST_CUDA
-//        profiler.BeginEvent("copy between device and host");
         //x.copyFromDeviceToHost();
         //y.copyFromDeviceToHost();
         //ty.copyFromDeviceToHost();
-//        profiler.EndCudaEvent();
 #endif
 
-//        profiler.EndCudaEvent();
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -502,14 +475,10 @@ class UniExecute :public Execute {
             dtype drop_value = batch[0]->drop_value;
             batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
         }
-
-//        profiler.EndEvent();
 #endif
     }
 
     void backward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        //profiler.BeginEvent("backward");
         int count = batch.size();
         Tensor2D lx, lty, ly;
 #if USE_GPU
@@ -533,31 +502,21 @@ class UniExecute :public Execute {
 #endif
             ly_vec.push_back(ptr->loss.value);
         }
-//        profiler.BeginEvent("cal lty");
         n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value, y.value,
                 drop_mask.value, drop_factor, lty.value, count, outDim);
-//        profiler.EndCudaEvent();
 #if TEST_CUDA
-//        profiler.BeginEvent("copy");
         n3ldg_cuda::Assert(param->W.grad.verify(
                     "uni backward W grad initial"));
 //          param->W.grad.copyFromHostToDevice();
-//        profiler.EndCudaEvent();
 #endif
-//        profiler.BeginEvent("cal W grad");
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
-//        profiler.EndCudaEvent();
 #if TEST_CUDA
-//        profiler.BeginEvent("copy");
         n3ldg_cuda::Assert(param->W.val.verify("uni W.val initial"));
 //        param->W.val.copyFromHostToDevice();
-//        profiler.EndCudaEvent();
 #endif
-//        profiler.BeginEvent("cal lx");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
                 lx.value, inDim, outDim, count, false, false, true);
-//        profiler.EndCudaEvent();
         std::vector<dtype*> losses;
         losses.reserve(count);
         for (int idx = 0; idx < count; idx++) {
@@ -570,19 +529,14 @@ class UniExecute :public Execute {
         }
 
 #if TEST_CUDA
-//        profiler.BeginEvent("copy");
         n3ldg_cuda::Assert(
                 param->b.grad.verify("uni backward param b initial"));
         //param->b.grad.copyFromHostToDevice();
-//        profiler.EndCudaEvent();
 #endif
-//        profiler.BeginEvent("add bias and losses");
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 lty.value, lx.value, param->b.grad.value, losses, count,
                 outDim, inDim);
-//        profiler.EndCudaEvent();
 
-        //profiler.EndCudaEvent();
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -654,7 +608,6 @@ class UniExecute :public Execute {
                 ptr->in->loss[idy] += lx[idy][idx];
             }
         }
-        //profiler.EndEvent();
 #endif
     }
 };
@@ -713,63 +666,48 @@ public:
     bool bTrain;
 
     void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("linear forward");
         int count = batch.size();
 
-//        profiler.BeginEvent("init");
 #if TEST_CUDA
         x.init(inDim, count);
         y.init(outDim, count);
         b.init(outDim, count);
-//        profiler.EndEvent();
 #else
         x.initOnDevice(inDim, count);
         y.initOnDevice(outDim, count);
-//        profiler.EndCudaEvent();
 #endif // TEST_CUDA
         std::vector<dtype*> xs, ys;
         xs.reserve(batch.size());
         ys.reserve(batch.size());
 
 #if TEST_CUDA
-//        profiler.BeginEvent("copy from host to device");
         //param->W.val.copyFromHostToDevice();
         //param->b.val.copyFromHostToDevice();
-//        profiler.EndCudaEvent();
 #endif // TEST_CUDA
 
         for (int i = 0; i < batch.size(); ++i) {
             LinearNode *n = static_cast<LinearNode*>(batch.at(i));
 
 #if TEST_CUDA
-//            profiler.BeginEvent("copy between device and host");
             //n->in->val.copyFromHostToDevice();
-//            profiler.EndCudaEvent();
 #endif // TEST_CUDA
 
-//            profiler.BeginEvent("vector push_back");
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
-//            profiler.EndEvent();
         }
 
-//        profiler.BeginEvent("CopyForUniNodeForward");
         n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
                 y.value,
                 count,
                 inDim,
                 outDim);
-//        profiler.EndCudaEvent();
 
-//        profiler.BeginEvent("MatrixMultiplyMatrix");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
                 y.value,
                 outDim,
                 inDim,
                 count,
                 false);
-//        profiler.EndCudaEvent();
 
         std::vector<dtype*> vals;
         vals.reserve(count);
@@ -800,12 +738,9 @@ public:
         }
 #endif
 
-//        profiler.EndCudaEvent();
     }
 
     void backward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("backward");
         int count = batch.size();
         Tensor2D lx, ly;
 #if TEST_CUDA
@@ -828,23 +763,15 @@ public:
         n3ldg_cuda::CalculateLyForLinearBackward(ly_vec, ly.value, count,
                 outDim);
 #if TEST_CUDA
-//        profiler.BeginEvent("copy");
         param->W.grad.copyFromHostToDevice();
-//        profiler.EndCudaEvent();
 #endif
-//        profiler.BeginEvent("cal W grad");
         n3ldg_cuda::MatrixMultiplyMatrix(ly.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
-//        profiler.EndCudaEvent();
 #if TEST_CUDA
-//        profiler.BeginEvent("copy");
         param->W.val.copyFromHostToDevice();
-//        profiler.EndCudaEvent();
 #endif
-//        profiler.BeginEvent("cal lx");
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, ly.value,
                 lx.value, inDim, outDim, count, false, false, true);
-//        profiler.EndCudaEvent();
         std::vector<dtype*> losses;
         losses.reserve(count);
         for (int idx = 0; idx < count; idx++) {
@@ -856,17 +783,12 @@ public:
         }
 
 #if TEST_CUDA
-//        profiler.BeginEvent("copy");
         param->b.grad.copyFromHostToDevice();
-//        profiler.EndCudaEvent();
 #endif
-//        profiler.BeginEvent("add bias and losses");
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 ly.value, lx.value, param->b.grad.value, losses, count,
                 outDim, inDim);
-//        profiler.EndCudaEvent();
 
-//        profiler.EndCudaEvent();
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -917,8 +839,6 @@ class LinearExecute :public Execute {
 
   public:
     inline void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("linear forward");
         count = batch.size();
         x.init(inDim, count);
         y.init(outDim, count);
@@ -939,12 +859,9 @@ class LinearExecute :public Execute {
             }
             ptr->forward_drop(bTrain, drop_factor);
         }
-//        profiler.EndEvent();
     }
 
     inline void backward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("linear backward");
         Tensor2D lx, ly;
         lx.init(inDim, count);
         ly.init(outDim, count);
@@ -967,7 +884,6 @@ class LinearExecute :public Execute {
                 ptr->in->loss[idy] += lx[idy][idx];
             }
         }
-        profiler.EndEvent();
     }
 };
 #endif

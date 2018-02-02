@@ -13,7 +13,6 @@
 #include "MyLib.h"
 #include "Node.h"
 #include "Graph.h"
-#include "profiler.h"
 #if USE_GPU
 #include "n3ldg_cuda.h"
 #endif
@@ -252,8 +251,6 @@ class ConcatExecute : public Execute {
     Tensor2D drop_mask;
   public:
     void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("concat forward");
         int count = batch.size();
         assert(drop_factor < 1);
         if (drop_factor > 0) {
@@ -265,10 +262,8 @@ class ConcatExecute : public Execute {
             n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
                     drop_mask.value);
         }
-//        profiler.BeginEvent("ConcatForward");
         n3ldg_cuda::ConcatForward(graph_info, drop_mask.value, drop_factor,
             count, inCount, outDim);
-//        profiler.EndCudaEvent();
 #if TEST_CUDA
         if (drop_factor > 0) {
             drop_mask.copyFromDeviceToHost();
@@ -288,12 +283,9 @@ class ConcatExecute : public Execute {
             n3ldg_cuda::Assert(batch[idx]->val.verify("concat forward"));
         }
 #endif
-//        profiler.EndCudaEvent();
     }
 
     void backward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        //profiler.BeginEvent("concat backward");
         int count = batch.size();
         std::vector<dtype**> in_losses;
         in_losses.reserve(count);
@@ -335,7 +327,6 @@ class ConcatExecute : public Execute {
             }
         }
 #endif
-        //profiler.EndCudaEvent();
     }
 };
 #else
@@ -344,27 +335,21 @@ class ConcatExecute : public Execute {
     bool bTrain;
   public:
     inline void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("concat forward");
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
             batch[idx]->forward_drop(bTrain, drop_factor);
         }
-//        profiler.EndEvent();
     }
 
     inline void backward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("concat backward");
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward_drop();
             batch[idx]->backward();
         }
-//        profiler.EndEvent();
     }
 };
 #endif

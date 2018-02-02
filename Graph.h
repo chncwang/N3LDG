@@ -13,7 +13,6 @@
 #include "Eigen/Dense"
 #include "Node.h"
 #include "MyLib.h"
-#include "profiler.h"
 #include <set>
 #include <map>
 
@@ -126,17 +125,10 @@ class Graph {
     }
 
     inline void backward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("backward");
         int count = execs.size();
         for (int idx = count - 1; idx >= 0; idx--) {
             execs[idx]->backward();
         }
-#if USE_GPU
-        profiler.EndCudaEvent();
-#else
-        profiler.EndEvent();
-#endif
     }
 
     inline void addNode(PNode x) {
@@ -149,9 +141,6 @@ class Graph {
 
     //real executation
     void compute() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("compute");
-
         if (host_memory == NULL) {
             host_memory = n3ldg_cuda::GraphHostAlloc();
         }
@@ -242,11 +231,6 @@ class Graph {
             std::cout << "unprocessed: " << unprocessed << std::endl;
             abort();
         }
-#if USE_GPU
-        profiler.EndCudaEvent();
-#else
-        profiler.EndEvent();
-#endif
     }
 
     void computeNodeInfo(std::vector<std::vector<NodeInfo>> &graph_node_info) const {

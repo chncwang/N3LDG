@@ -176,11 +176,8 @@ class SparseParam : public BaseParam {
 
     dtype squareGradNorm() override {
 #if USE_GPU && !TEST_CUDA
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("sparse SquareSum");
         dtype result = n3ldg_cuda::SquareSum(grad.value, dIndexers.value,
                 indexers.size(), val.col);
-//        profiler.EndCudaEvent();
         return result;
 #elif USE_GPU && TEST_CUDA
         dtype sumNorm = 0.0;
@@ -217,10 +214,7 @@ class SparseParam : public BaseParam {
 
     inline void rescaleGrad(dtype scale) {
 #if USE_GPU
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("sparse rescaleGrad");
         n3ldg_cuda::Rescale(grad.value, grad.size, scale);
-//        profiler.EndCudaEvent();
 #if TEST_CUDA
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {

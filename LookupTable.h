@@ -15,7 +15,6 @@
 #include "Node.h"
 #include "Graph.h"
 #include "ModelUpdate.h"
-#include "profiler.h"
 
 class LookupTable {
 public:
@@ -296,8 +295,6 @@ public:
     std::vector<int> xids;
 
     inline void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        //profiler.BeginEvent("lookup forward");
         int count = batch.size();
 #if TEST_CUDA
         //table->E.val.copyFromHostToDevice();
@@ -308,10 +305,8 @@ public:
 #else
             drop_mask.initOnDevice(dim, count);
 #endif
-            //profiler.BeginEvent("dropout mask");
             n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
                     drop_mask.value);
-            //profiler.EndCudaEvent();
         }
         xids.reserve(count);
         std::vector<dtype*> vals;
@@ -342,12 +337,9 @@ public:
             n3ldg_cuda::Assert(batch[idx]->val.verify("lookup forward"));
         }
 #endif
-        //profiler.EndCudaEvent();
     }
 
     inline void backward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        //profiler.BeginEvent("backward");
         int count = batch.size();
         std::vector<dtype*> losses;
         losses.reserve(count);
@@ -381,7 +373,6 @@ public:
                     table->E.dIndexers.len,
                     "lookup backward index"));
 #endif
-        //profiler.EndCudaEvent();
     }
 };
 #else
@@ -393,25 +384,19 @@ class LookupExecute :public Execute {
             int count = batch.size();
             //#pragma omp parallel for
             for (int idx = 0; idx < count; idx++) {
-                n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-                //profiler.BeginEvent("LookupNode forward");
                 batch[idx]->compute();
                 batch[idx]->forward_drop(bTrain, drop_factor /
                         batch[0]->drop_value);
-                //profiler.EndEvent();
             }
         }
 
         inline void backward() {
-            n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//            profiler.BeginEvent("lookup backward");
             int count = batch.size();
             //#pragma omp parallel for
             for (int idx = 0; idx < count; idx++) {
                 batch[idx]->backward_drop();
                 batch[idx]->backward();
             }
-//            profiler.EndEvent();
         }
 };
 #endif
