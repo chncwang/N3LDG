@@ -194,6 +194,7 @@ public:
 
     void toNodeInfo(NodeInfo &info) const override {
         Node::toNodeInfo(info);
+        info.input_count = ins.size();
         for (PNode p : ins) {
             info.input_vals.push_back(p->val.value);
             info.input_losses.push_back(p->loss.value);
@@ -281,8 +282,8 @@ public:
 #endif
             outs.push_back(n->val.value);
         }
-        n3ldg_cuda::MaxPoolForward(ins, count, in_counts, dim,
-                hit_inputs.value, outs);
+        n3ldg_cuda::MaxPoolForward(graph_info, count, in_counts, dim,
+                hit_inputs.value);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();

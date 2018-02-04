@@ -31,7 +31,8 @@ struct NodeInfo {
     dtype *loss;
     std::vector<dtype *> input_vals;
     std::vector<dtype *> input_losses;
-    std::vector<int32_t> input_dims;
+    int64_t input_count = -1;
+    std::vector<int64_t> input_dims;
 
     NodeInfo() = default;
     NodeInfo(const NodeInfo &) = default;
@@ -53,12 +54,18 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
             *(dtype**)(m + offset) = node_info.loss;
             offset += sizeof(node_info.loss);
         }
+        int max_input_count = 0;
+        for (const NodeInfo &node_info : vec) {
+            if (node_info.input_vals.size() > max_input_count) {
+                max_input_count = node_info.input_vals.size();
+            }
+        }
         for (const NodeInfo &node_info : vec) {
             if (!node_info.input_vals.empty()) {
                 int len = node_info.input_vals.size() *
-                        sizeof(node_info.input_vals.at(0));
+                    sizeof(node_info.input_vals.at(0));
                 memcpy((void*)(m + offset), node_info.input_vals.data(), len);
-                offset += len;
+                offset += max_input_count * sizeof(node_info.input_vals.at(0));
             }
         }
         for (const NodeInfo &node_info : vec) {
@@ -67,7 +74,14 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
                         sizeof(node_info.input_losses.at(0));
                 memcpy((void*)(m + offset),
                         node_info.input_losses.data(), len);
-                offset += len;
+                offset += max_input_count *
+                    sizeof(node_info.input_losses.at(0));
+            }
+        }
+        for (const NodeInfo &node_info : vec) {
+            if (node_info.input_count != -1) {
+                *(int64_t*)(m + offset) = node_info.input_count;
+                offset += sizeof(node_info.input_count);
             }
         }
         const NodeInfo &node_info = vec.at(0);
@@ -75,7 +89,7 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
             int len = node_info.input_dims.size() *
                     sizeof(node_info.input_dims.at(0));
             memcpy((void*)(m + offset), node_info.input_dims.data(), len);
-            offset += len;
+            offset += max_input_count * sizeof(node_info.input_dims.at(0));
         }
     }
     if (offset > size) {
@@ -103,35 +117,58 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
 //        }
 //        m += graph.at(i).size() * sizeof(dtype*);
 
+//        int max_input_count = 0;
+//        for (const NodeInfo &node_info : graph.at(i)) {
+//            if (node_info.input_vals.size() > max_input_count) {
+//                max_input_count = node_info.input_vals.size();
+//            }
+//        }
+//        std::cout << "max_input_count when decoding:" << max_input_count <<
+//            std::endl;
+
 //        std::cout << "input val:" << std::endl;
-//        int input_size = graph.at(i).at(0).input_vals.size();
 //        for (int j = 0; j < graph.at(i).size(); ++j) {
+//            int input_size = graph.at(i).at(j).input_vals.size();
 //            for (int k = 0; k < input_size; ++k) {
 //                std::cout << "memory:" <<
-//                    *(dtype**)(m + (j * input_size + k) * sizeof(dtype*))
+//                    *(dtype**)(m + (j * max_input_count + k) * sizeof(dtype*))
 //                    << " node:" << graph.at(i).at(j).input_vals.at(k) <<
 //                    std::endl;
 //            }
 //        }
-//        m += input_size * graph.at(i).size() * sizeof(dtype*);
+//        m += max_input_count * graph.at(i).size() * sizeof(dtype*);
 
 //        std::cout << "input loss:" << std::endl;
-//        input_size = graph.at(i).at(0).input_losses.size();
 //        for (int j = 0; j < graph.at(i).size(); ++j) {
+//            int input_size = graph.at(i).at(j).input_losses.size();
 //            for (int k = 0; k < input_size; ++k) {
 //                std::cout << "memory:" <<
-//                    *(dtype**)(m + (j * input_size + k) * sizeof(dtype*))
+//                    *(dtype**)(m + (j * max_input_count + k) * sizeof(dtype*))
 //                    << " node:" << graph.at(i).at(j).input_losses.at(k) <<
 //                    std::endl;
 //            }
 //        }
-//        m += input_size * graph.at(i).size() * sizeof(dtype*);
+//        m += max_input_count * graph.at(i).size() * sizeof(dtype*);
+
+//        std::cout << "input count:" << std::endl;
+//        bool contain_input_count = false;
+//        for (int j = 0; j < graph.at(i).size(); ++j) {
+//            int input_size = graph.at(i).at(j).input_count;
+//            if (input_size != -1) {
+//                contain_input_count = true;
+//                std::cout << "memory:" << *(int64_t*)(m + j * sizeof(int64_t))
+//                    << " node:" << graph.at(i).at(j).input_count << std::endl;
+//            }
+//        }
+//        if (contain_input_count) {
+//            m += graph.at(i).size() * sizeof(int64_t);
+//        }
 
 //        std::cout << "input dim:" << std::endl;
-//        input_size = graph.at(i).at(0).input_dims.size();
+//        int input_size = graph.at(i).at(0).input_dims.size();
 //        for (int k = 0; k < input_size; ++k) {
 //            std::cout << "memory:" <<
-//                *(int*)(m + k * sizeof(int32_t))
+//                *(int64_t*)(m + k * sizeof(int64_t))
 //                << " node:" << graph.at(i).at(0).input_dims.at(k) <<
 //                std::endl;
 //        }
