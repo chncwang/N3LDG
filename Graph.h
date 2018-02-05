@@ -139,13 +139,13 @@ class Graph {
 
     //real executation
     void compute() {
+#if USE_GPU
         if (host_memory == NULL) {
             host_memory = n3ldg_cuda::GraphHostAlloc();
         }
         if (device_memory == NULL) {
             device_memory = n3ldg_cuda::Malloc(10000000);
         }
-#if USE_GPU
         std::vector<std::vector<NodeInfo>> graph_node_info;
         computeNodeInfo(graph_node_info);
         std::vector<int> offsets;
@@ -174,8 +174,10 @@ class Graph {
                 if (!find) {
                     PExecute new_exec = free_nodes.at(idx)->generate(train,
                             drop_factor);
+#if USE_GPU
                     new_exec->graph_info = (char*)device_memory +
                         offsets.at(step++);
+#endif
                     cur_execs.push_back(new_exec);
                     cur_execs_size++;
                 }
@@ -234,6 +236,7 @@ class Graph {
         }
     }
 
+#if USE_GPU
     void computeNodeInfo(std::vector<std::vector<NodeInfo>> &graph_node_info) const {
         if (!graph_node_info.empty()) {
             abort();
@@ -285,11 +288,6 @@ class Graph {
                 copied_finished_nodes.push_back(copied_free_nodes.at(idx));
                 int parent_count = copied_free_nodes.at(idx)->parents.size();
                 for (int idy = 0; idy < parent_count; idy++) {
-//                    if (GetDegree(degree_map, copied_free_nodes.at(idx)->
-//                                parents.at(idy)) <= 0) {
-//                        std::cout << "degree is negative" << std::endl;
-//                        abort();
-//                    }
                     DecreaseDegree(degree_map,
                             copied_free_nodes.at(idx)->parents.at(idy));
                     int degree = GetDegree(degree_map,
@@ -326,6 +324,7 @@ class Graph {
             abort();
         }
     }
+#endif
 };
 
 

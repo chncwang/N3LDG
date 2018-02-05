@@ -362,18 +362,11 @@ class UniExecute :public Execute {
             ys.push_back(n->val.value);
         }
 
-        n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
-                ty.value,
-                count,
-                inDim,
-                outDim);
+        n3ldg_cuda::CopyForUniNodeForward(graph_info, param->b.val.value,
+                x.value, ty.value, count, inDim, outDim);
 
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
-                ty.value,
-                outDim,
-                inDim,
-                count,
-                param->bUseB);
+                ty.value, outDim, inDim, count, param->bUseB);
 
         if (bTrain) {
             n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
@@ -680,42 +673,20 @@ public:
         xs.reserve(batch.size());
         ys.reserve(batch.size());
 
-#if TEST_CUDA
-        //param->W.val.copyFromHostToDevice();
-        //param->b.val.copyFromHostToDevice();
-#endif // TEST_CUDA
-
         for (int i = 0; i < batch.size(); ++i) {
             LinearNode *n = static_cast<LinearNode*>(batch.at(i));
-
-#if TEST_CUDA
-            //n->in->val.copyFromHostToDevice();
-#endif // TEST_CUDA
 
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
         }
 
-        n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
-                y.value,
-                count,
-                inDim,
-                outDim);
+        n3ldg_cuda::CopyForUniNodeForward(graph_info, param->b.val.value,
+                x.value, y.value, count, inDim, outDim);
 
-        n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
-                y.value,
-                outDim,
-                inDim,
-                count,
-                false);
+        n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value, y.value,
+                outDim, inDim, count, false);
 
-        std::vector<dtype*> vals;
-        vals.reserve(count);
-        for (int i = 0; i<batch.size(); ++i) {
-            LinearNode *n = static_cast<LinearNode*>(batch.at(i));
-            vals.push_back(n->val.value);
-        }
-        n3ldg_cuda::CopyFromOneVectorToMultiVectors(y.value, vals, count,
+        n3ldg_cuda::CopyFromOneVectorToMultiVals(graph_info, y.value, count,
                 outDim);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
