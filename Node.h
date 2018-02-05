@@ -104,13 +104,13 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
 //        int offset = offsets.at(i);
 //        std::cout << "offset:" << offset << std::endl;
 //        char *m = (char*)memory + offset;
-//        std::cout << "val:" << std::endl;
+//        std::cout << "val:" << (void*)m << std::endl;
 //        for (int j = 0; j < graph.at(i).size(); ++j) {
 //            std::cout << "memory:" << *(dtype**)(m + j * sizeof(dtype*)) <<
 //                " node:" << graph.at(i).at(j).val << std::endl;
 //        }
 //        m += graph.at(i).size() * sizeof(dtype*);
-//        std::cout << "loss:" << std::endl;
+//        std::cout << "loss:" << (void*)m << std::endl;
 //        for (int j = 0; j < graph.at(i).size(); ++j) {
 //            std::cout << "memory:" << *(dtype**)(m + j * sizeof(dtype*)) <<
 //                " node:" << graph.at(i).at(j).loss << std::endl;
@@ -126,7 +126,7 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
 //        std::cout << "max_input_count when decoding:" << max_input_count <<
 //            std::endl;
 
-//        std::cout << "input val:" << std::endl;
+//        std::cout << "input val:" << (void*)m << std::endl;
 //        for (int j = 0; j < graph.at(i).size(); ++j) {
 //            int input_size = graph.at(i).at(j).input_vals.size();
 //            for (int k = 0; k < input_size; ++k) {
@@ -138,7 +138,7 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
 //        }
 //        m += max_input_count * graph.at(i).size() * sizeof(dtype*);
 
-//        std::cout << "input loss:" << std::endl;
+//        std::cout << "input loss:" << (void*)m << std::endl;
 //        for (int j = 0; j < graph.at(i).size(); ++j) {
 //            int input_size = graph.at(i).at(j).input_losses.size();
 //            for (int k = 0; k < input_size; ++k) {
@@ -150,7 +150,7 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
 //        }
 //        m += max_input_count * graph.at(i).size() * sizeof(dtype*);
 
-//        std::cout << "input count:" << std::endl;
+//        std::cout << "input count:" << (void*)m << std::endl;
 //        bool contain_input_count = false;
 //        for (int j = 0; j < graph.at(i).size(); ++j) {
 //            int input_size = graph.at(i).at(j).input_count;
@@ -164,7 +164,7 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
 //            m += graph.at(i).size() * sizeof(int64_t);
 //        }
 
-//        std::cout << "input dim:" << std::endl;
+//        std::cout << "input dim:" << (void*)m << std::endl;
 //        int input_size = graph.at(i).at(0).input_dims.size();
 //        for (int k = 0; k < input_size; ++k) {
 //            std::cout << "memory:" <<

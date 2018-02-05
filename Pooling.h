@@ -259,13 +259,13 @@ class MaxPoolExecute : public Execute
 public:
     int dim;
     n3ldg_cuda::IntArray hit_inputs;
+    std::vector<int> in_counts;
 
     void forward() override {
         int count = batch.size();
         hit_inputs.init(count * dim);
         std::vector<dtype**> ins;
         ins.reserve(count);
-        std::vector<int> in_counts;
         in_counts.reserve(count);
         std::vector<dtype*> outs;
         outs.reserve(count);
@@ -312,18 +312,18 @@ public:
         for (Node *n : batch) {
             MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
             n3ldg_cuda::Assert(m->loss.verify("max pooling backward loss"));
-//            m->loss.copyFromHostToDevice();
             losses.push_back(m->loss.value);
             in_losses.push_back(m->dInLosses.value);
 #if TEST_CUDA
             int in_i = 0;
             for (Node *in : m->ins) {
-                n3ldg_cuda::Assert(in->loss.verify("max pooling backward in loss initial"));
+                n3ldg_cuda::Assert(in->loss.verify(
+                            "max pooling backward in loss initial"));
             }
 #endif
         }
-        n3ldg_cuda::MaxPoolBackward(losses, hit_inputs.value, count, dim,
-                in_losses);
+        n3ldg_cuda::MaxPoolBackward(graph_info, in_counts, hit_inputs.value,
+                count, dim);
 
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
