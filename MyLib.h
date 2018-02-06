@@ -785,6 +785,14 @@ bool isEqual(dtype a, dtype b) {
     return c < 0.001 && c > -0.001;
 }
 
+size_t typeHashCode(void *p) {
+    auto addr = reinterpret_cast<uintptr_t>(p);
+#if SIZE_MAX < UINTPTR_MAX
+    addr %= SIZE_MAX;
+#endif
+    return addr;
+}
+
 #define n3ldg_assert(assertion, message) \
   if (!(assertion)) {\
     std::cerr << message << endl;\

@@ -141,7 +141,7 @@ class UniNode : public Node {
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
-    inline bool typeEqual(PNode other) {
+    bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
         if (!result) return false;
 
@@ -152,11 +152,15 @@ class UniNode : public Node {
         if (activate != conv_other->activate || derivate != conv_other->derivate) {
             return false;
         }
-        if (!isEqual(drop_value, other->drop_value)) {
-            return false;
-        }
 
         return true;
+    }
+
+    size_t typeHashCode() const override {
+        void *act = reinterpret_cast<void*>(activate);
+        void *de = reinterpret_cast<void*>(derivate);
+        return Node::typeHashCode() ^ ::typeHashCode(param) ^ ::typeHashCode(act) ^
+            (::typeHashCode(de) << 1);
     }
 
 #if USE_GPU
@@ -288,7 +292,7 @@ class LinearNode : public Node {
     PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
-    inline bool typeEqual(PNode other) {
+    bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
         if (!result) return false;
         LinearNode* conv_other = (LinearNode*)other;
@@ -297,6 +301,10 @@ class LinearNode : public Node {
         }
 
         return true;
+    }
+
+    size_t typeHashCode() const override {
+        return Node::typeHashCode() ^ ::typeHashCode(param);
     }
 
 #if USE_GPU

@@ -204,9 +204,6 @@ public:
             return false;
         }
         ConcatNode *o = static_cast<ConcatNode*>(other);
-        if (!isEqual(drop_value, o->drop_value)) {
-            return false;
-        }
         if (inDims.size() != o->inDims.size()) {
             return false;
         }
@@ -216,6 +213,16 @@ public:
             }
         }
         return true;
+    }
+
+    size_t typeHashCode() const override {
+        size_t hash_code = Node::typeHashCode() ^
+            std::hash<int>{}(inDims.size());
+        int i = 0;
+        for (int dim : inDims) {
+            hash_code ^= (dim << (i++ % 16));
+        }
+        return hash_code;
     }
 
     void compute() {

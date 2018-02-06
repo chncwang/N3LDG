@@ -13,6 +13,8 @@
 *      Author: mszhang
 */
 #include <iomanip>
+#include <functional>
+#include <string>
 #include "MyTensor.h"
 #if USE_GPU
 #include "n3ldg_cuda.h"
@@ -291,6 +293,11 @@ class Node {
         }
 #endif
         return true;
+    }
+
+    virtual size_t typeHashCode() const {
+        return std::hash<std::string>{}(node_type) ^ std::hash<int>{}(dim) ^
+            (std::hash<int>{}((int)(10000 * drop_value)) << 1);
     }
 
   public:

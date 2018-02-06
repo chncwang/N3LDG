@@ -116,9 +116,6 @@ public:
 #if !TEST_CUDA
     vector<PNode> ins;
 #endif
-    n3ldg_cuda::PageLockedNumberPointerArray dInValues;
-    n3ldg_cuda::PageLockedNumberPointerArray dInLosses;
-
     MaxPoolNode() {
         node_type = "max-pooling";
     }
@@ -175,22 +172,7 @@ public:
             ins[i]->addParent(this);
         }
 
-        initDeviceMembers();
         cg->addNode(this);
-    }
-
-    void initDeviceMembers() {
-        std::vector<dtype*> values;
-        values.reserve(ins.size());
-        std::vector<dtype*> losses;
-        losses.reserve(ins.size());
-        for (Node *n : ins) {
-            values.push_back(n->val.value);
-            losses.push_back(n->loss.value);
-        }
-
-        dInValues.init(values.data(), values.size());
-        dInLosses.init(losses.data(), losses.size());
     }
 
     void toNodeInfo(NodeInfo &info) const override {
@@ -267,14 +249,9 @@ public:
         profiler.BeginEvent("MaxPoolNode forward");
         int count = batch.size();
         hit_inputs.init(count * dim);
-        std::vector<dtype**> ins;
-        ins.reserve(count);
         in_counts.reserve(count);
-        std::vector<dtype*> outs;
-        outs.reserve(count);
         for (Node *n : batch) {
             MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
-            ins.push_back(m->dInValues.value);
             in_counts.push_back(m->ins.size());
 #if TEST_CUDA
             for (Node *nn : m->ins) {
@@ -283,7 +260,6 @@ public:
                 nn->val.copyFromHostToDevice();
             }
 #endif
-            outs.push_back(n->val.value);
         }
         n3ldg_cuda::MaxPoolForward(graph_info, count, in_counts, dim,
                 hit_inputs.value);
@@ -309,15 +285,9 @@ public:
 
     void backward() override {
         int count = batch.size();
-        std::vector<dtype*> losses;
-        losses.reserve(count);
-        std::vector<dtype**> in_losses;
-        in_losses.reserve(count);
         for (Node *n : batch) {
             MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
             n3ldg_cuda::Assert(m->loss.verify("max pooling backward loss"));
-            losses.push_back(m->loss.value);
-            in_losses.push_back(m->dInLosses.value);
 #if TEST_CUDA
             int in_i = 0;
             for (Node *in : m->ins) {
