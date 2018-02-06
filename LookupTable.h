@@ -15,6 +15,7 @@
 #include "Node.h"
 #include "Graph.h"
 #include "ModelUpdate.h"
+#include "profiler.h"
 
 class LookupTable {
 public:
@@ -295,6 +296,8 @@ public:
     std::vector<int> xids;
 
     inline void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("LookupNode forward");
         int count = batch.size();
 #if TEST_CUDA
         //table->E.val.copyFromHostToDevice();
@@ -337,6 +340,7 @@ public:
             n3ldg_cuda::Assert(batch[idx]->val.verify("lookup forward"));
         }
 #endif
+        profiler.EndCudaEvent();
     }
 
     inline void backward() {

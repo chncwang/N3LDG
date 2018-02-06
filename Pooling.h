@@ -15,6 +15,7 @@
 #if USE_GPU
 #include "n3ldg_cuda.h"
 #endif
+#include "profiler.h"
 
 class PoolNode : public Node {
   public:
@@ -262,6 +263,8 @@ public:
     std::vector<int> in_counts;
 
     void forward() override {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("MaxPoolNode forward");
         int count = batch.size();
         hit_inputs.init(count * dim);
         std::vector<dtype**> ins;
@@ -301,6 +304,7 @@ public:
             }
         }
 #endif
+        profiler.EndCudaEvent();
     }
 
     void backward() override {

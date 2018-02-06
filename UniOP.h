@@ -16,6 +16,7 @@
 #include "Graph.h"
 #include "ModelUpdate.h"
 #include <cstdlib>
+#include "profiler.h"
 
 class UniParams {
   public:
@@ -319,6 +320,8 @@ class UniExecute :public Execute {
     bool bTrain;
 
     inline void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("UniExecute forward");
         int count = batch.size();
 #if USE_GPU
 #if TEST_CUDA
@@ -469,6 +472,7 @@ class UniExecute :public Execute {
             batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
         }
 #endif
+        profiler.EndCudaEvent();
     }
 
     void backward() {
@@ -659,6 +663,8 @@ public:
     bool bTrain;
 
     void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("LinearExecute forward");
         int count = batch.size();
 
 #if TEST_CUDA
@@ -709,6 +715,7 @@ public:
         }
 #endif
 
+        profiler.EndCudaEvent();
     }
 
     void backward() {

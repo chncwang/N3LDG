@@ -16,6 +16,7 @@
 #if USE_GPU
 #include "n3ldg_cuda.h"
 #endif
+#include "profiler.h"
 
 class ConcatNode : public Node {
 public:
@@ -251,6 +252,8 @@ class ConcatExecute : public Execute {
     Tensor2D drop_mask;
   public:
     void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("ConcatNode forward");
         int count = batch.size();
         assert(drop_factor < 1);
         if (drop_factor > 0) {
@@ -283,6 +286,7 @@ class ConcatExecute : public Execute {
             n3ldg_cuda::Assert(batch[idx]->val.verify("concat forward"));
         }
 #endif
+        profiler.EndCudaEvent();
     }
 
     void backward() {

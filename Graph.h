@@ -15,6 +15,7 @@
 #include "MyLib.h"
 #include <set>
 #include <map>
+#include "profiler.h"
 
 using namespace Eigen;
 
@@ -139,6 +140,7 @@ class Graph {
 
     //real executation
     void compute() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
 #if USE_GPU
         if (host_memory == NULL) {
             host_memory = n3ldg_cuda::GraphHostAlloc();
@@ -146,8 +148,10 @@ class Graph {
         if (device_memory == NULL) {
             device_memory = n3ldg_cuda::Malloc(10000000);
         }
+        profiler.BeginEvent("computeNodeInfo");
         std::vector<std::vector<NodeInfo>> graph_node_info;
         computeNodeInfo(graph_node_info);
+        profiler.EndEvent();
         std::vector<int> offsets;
         int actual_size = GraphToMemory(graph_node_info, host_memory, offsets,
                 10000000);
