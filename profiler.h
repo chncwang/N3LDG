@@ -83,6 +83,10 @@ public:
 
 #if USE_GPU
     void EndCudaEvent();
+#else
+    void EndCudaEvent() {
+        EndEvent();
+    }
 #endif
 
     void Print() {

@@ -15,7 +15,9 @@
 #include "MyLib.h"
 #include <set>
 #include <map>
+#include <unordered_map>
 #include "profiler.h"
+#include <vector>
 
 using namespace Eigen;
 
@@ -38,13 +40,40 @@ void DecreaseDegree(std::map<void*, int> &degree_map, PNode p) {
     }
 }
 
+struct SelfHash {
+    size_t operator()(size_t hash) const {
+        return hash;
+    }
+};
+
+typedef std::unordered_map<size_t, vector<PNode>, SelfHash> NodeMap;
+
+void Insert(const PNode node, NodeMap& node_map) {
+    size_t x_hash = node->typeHashCode();
+    auto it = node_map.find(x_hash);
+    if (it == node_map.end()) {
+        std::vector<PNode> v = {node};
+        node_map.insert(std::make_pair<size_t, std::vector<PNode>>(std::move(x_hash), std::move(v)));
+    } else {
+        it->second.push_back(node);
+    }
+}
+
+int Size(const NodeMap &map) {
+    int sum = 0;
+    for (auto it : map) {
+        sum += it.second.size();
+    }
+    return sum;
+}
+
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
 class Graph {
   protected:
     vector<PExecute> execs; //backward
     vector<PNode> nodes; //forward
-    vector<PNode> free_nodes;
+    NodeMap free_nodes;
     vector<PNode> finish_nodes;
     vector<PNode> all_nodes;
 
@@ -58,10 +87,6 @@ class Graph {
 
   public:
     Graph() {
-        execs.clear();
-        execs.clear();
-        nodes.clear();
-        free_nodes.clear();
         drop_factor = 1.0;
     }
 
@@ -133,7 +158,7 @@ class Graph {
     inline void addNode(PNode x) {
         nodes.push_back(x);
         if (x->degree == 0) {
-            free_nodes.push_back(x);
+            Insert(x, free_nodes);
         }
         all_nodes.push_back(x);
     }
@@ -158,70 +183,45 @@ class Graph {
         n3ldg_cuda::Memcpy(device_memory, host_memory, actual_size,
                 cudaMemcpyHostToDevice);
 #endif
-
-        int free_count = free_nodes.size();
         int step = 0;
 
-        while (free_count > 0) {
+        while (Size(free_nodes) > 0) {
             vector<PExecute> cur_execs;
-            int cur_execs_size = 0;
-
-            for (int idx = 0; idx < free_count; idx++) {
-                bool find = false;
-                for (int idy = 0; idy < cur_execs_size; idy++) {
-                    if (cur_execs.at(idy)->addNode(free_nodes.at(idx))) {
-                        find = true;
-                        break;
-                    }
-                }
-
-                if (!find) {
-                    PExecute new_exec = free_nodes.at(idx)->generate(train,
-                            drop_factor);
+            for (auto it : free_nodes) {
+                PExecute new_exec = it.second.at(0)->generate(train,
+                        drop_factor);
 #if USE_GPU
-                    new_exec->graph_info = (char*)device_memory +
-                        offsets.at(step++);
+                new_exec->graph_info = (char*)device_memory +
+                    offsets.at(step++);
 #endif
-                    cur_execs.push_back(new_exec);
-                    cur_execs_size++;
-                }
-
+                new_exec->batch = it.second;
+                cur_execs.push_back(new_exec);
             }
 
-            //execute
-            //#pragma omp parallel for
-            for (int idy = 0; idy < cur_execs_size; idy++) {
-                //std::cout << "batch size:" << cur_execs.at(idy)->batch.size() << std::endl;
-                cur_execs.at(idy)->forward();
-            }
-
-            for (int idy = 0; idy < cur_execs_size; idy++) {
-                execs.push_back(cur_execs.at(idy));
+            for (PExecute e : cur_execs) {
+                e->forward();
+                delete e;
             }
 
             //finished nodes
-            vector<PNode> new_free_nodes;
-            for (int idx = 0; idx < free_count; idx++) {
-                finish_nodes.push_back(free_nodes.at(idx));
-                int parent_count = free_nodes.at(idx)->parents.size();
-                for (int idy = 0; idy < parent_count; idy++) {
-                    if (free_nodes.at(idx)->parents.at(idy)->degree <= 0) {
-                        abort();
-                    }
-                    free_nodes.at(idx)->parents.at(idy)->degree--;
-                    if (free_nodes.at(idx)->parents.at(idy)->degree == 0) {
-                        new_free_nodes.push_back(free_nodes.at(idx)->
-                                parents.at(idy));
+            NodeMap new_free_nodes;
+            for (auto vec_it : free_nodes) {
+                for (auto free_node_it : vec_it.second) {
+                    finish_nodes.push_back(free_node_it);
+                    for (auto parent_it : free_node_it->parents) {
+                        if (parent_it->degree <= 0) {
+                            abort();
+                        }
+                        parent_it->degree--;
+                        if (parent_it->degree == 0) {
+                            Insert(parent_it, new_free_nodes);
+                        }
                     }
                 }
             }
 
             // update free nodes
-            free_nodes.clear();
-            free_count = new_free_nodes.size();
-            for (int idx = 0; idx < free_count; idx++) {
-                free_nodes.push_back(new_free_nodes.at(idx));
-            }
+            free_nodes = std::move(new_free_nodes);
         }
 
         if (finish_nodes.size() != all_nodes.size()) {
@@ -247,34 +247,23 @@ class Graph {
         }
 
         std::map<void *, int> degree_map;
-        std::vector<PNode> copied_free_nodes = free_nodes;
+        NodeMap copied_free_nodes = free_nodes;
         std::vector<PNode> copied_finished_nodes = finish_nodes;
-        int free_count = copied_free_nodes.size();
+        int free_count = Size(copied_free_nodes);
 
-        while (free_count > 0) {
+        while (Size(copied_free_nodes) > 0) {
             vector<PExecute> cur_execs;
-            int cur_execs_size = 0;
 
-            for (int idx = 0; idx < free_count; idx++) {
-                bool find = false;
-                for (int idy = 0; idy < cur_execs_size; idy++) {
-                    if (cur_execs.at(idy)->addNode(copied_free_nodes.at(idx))) {
-                        find = true;
-                        break;
-                    }
-                }
-
-                if (!find) {
-                    PExecute new_exec = copied_free_nodes.at(idx)->generate(train, drop_factor);
-                    cur_execs.push_back(new_exec);
-                    cur_execs_size++;
-                }
-
+            for (auto it : free_nodes) {
+                PExecute new_exec = it.second.at(0)->generate(train,
+                        drop_factor);
+                new_exec->batch = it.second;
+                cur_execs.push_back(new_exec);
             }
 
-            for (int idy = 0; idy < cur_execs_size; idy++) {
+            for (PExecute e : cur_execs) {
                 std::vector<NodeInfo> node_info_vec;
-                for (PNode p : cur_execs.at(idy)->batch) {
+                for (PNode p : e->batch) {
                     NodeInfo info;
                     p->toNodeInfo(info);
                     node_info_vec.push_back(info);
@@ -282,37 +271,29 @@ class Graph {
                 graph_node_info.push_back(node_info_vec);
             }
 
-            for (int idy = 0; idy < cur_execs_size; idy++) {
-                delete cur_execs.at(idy);
+            for (PExecute e : cur_execs) {
+                delete e;
             }
 
             //finished nodes
-            vector<PNode> new_free_nodes;
-            for (int idx = 0; idx < free_count; idx++) {
-                copied_finished_nodes.push_back(copied_free_nodes.at(idx));
-                int parent_count = copied_free_nodes.at(idx)->parents.size();
-                for (int idy = 0; idy < parent_count; idy++) {
-                    DecreaseDegree(degree_map,
-                            copied_free_nodes.at(idx)->parents.at(idy));
-                    int degree = GetDegree(degree_map,
-                                copied_free_nodes.at(idx)->parents.at(idy));
-                    if (degree == 0) {
-                        new_free_nodes.push_back(
-                                copied_free_nodes.at(idx)->parents.at(idy));
-                    } else if (degree < 0) {
-                        std::cout << "degree is negative after decrease" <<
-                            std::endl;
-                        abort();
+            NodeMap new_free_nodes;
+            for (auto vec_it : copied_free_nodes) {
+                for (auto free_node_it : vec_it.second) {
+                    copied_finished_nodes.push_back(free_node_it);
+                    for (auto parent_it : free_node_it->parents) {
+                        DecreaseDegree(degree_map, parent_it);
+                        int degree = GetDegree(degree_map, parent_it);
+                        if (degree < 0) {
+                            abort();
+                        }
+                        if (degree == 0) {
+                            Insert(parent_it, new_free_nodes);
+                        }
                     }
                 }
             }
 
-            // update free nodes
-            copied_free_nodes.clear();
-            free_count = new_free_nodes.size();
-            for (int idx = 0; idx < free_count; idx++) {
-                copied_free_nodes.push_back(new_free_nodes.at(idx));
-            }
+            copied_free_nodes = std::move(new_free_nodes);
         }
 
         if (copied_finished_nodes.size() != all_nodes.size()) {
