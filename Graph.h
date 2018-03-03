@@ -254,7 +254,7 @@ class Graph {
         while (Size(copied_free_nodes) > 0) {
             vector<PExecute> cur_execs;
 
-            for (auto it : free_nodes) {
+            for (auto it : copied_free_nodes) {
                 PExecute new_exec = it.second.at(0)->generate(train,
                         drop_factor);
                 new_exec->batch = it.second;
