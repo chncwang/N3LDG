@@ -200,8 +200,8 @@ class Graph {
 
             for (PExecute e : cur_execs) {
                 e->forward();
-                delete e;
             }
+            execs = std::move(cur_execs);
 
             //finished nodes
             NodeMap new_free_nodes;
