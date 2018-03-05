@@ -317,6 +317,8 @@ inline dtype fselu(const dtype& x) {
     return lambda * x;
 }
 
+
+
 inline dtype fexp(const dtype& x) {
     return exp(x);
 }

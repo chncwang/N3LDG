@@ -369,8 +369,21 @@ public:
     }
 };
 
-
 typedef  Execute* PExecute;
 
+#if USE_GPU
+
+typedef dtype N3LDGActivated(const dtype &x);
+n3ldg_cuda::ActivatedEnum ToActivatedEnum(N3LDGActivated func) {
+    if (func == ftanh) {
+        return n3ldg_cuda::ActivatedEnum::TANH;
+    } else if (func == fsigmoid) {
+        return n3ldg_cuda::ActivatedEnum::SIGMOID;
+    } else {
+        abort();
+    }
+}
+
+#endif
 
 #endif

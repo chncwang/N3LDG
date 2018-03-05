@@ -384,8 +384,9 @@ class UniExecute :public Execute {
                     drop_mask.value);
         }
 
-        n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim, bTrain, drop_factor,
-                drop_mask.value);
+        n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
+        n3ldg_cuda::Tanh(activatedEnum, ty.value, ys, y.value, outDim, bTrain,
+                drop_factor, drop_mask.value);
 
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
