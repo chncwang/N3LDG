@@ -357,7 +357,6 @@ class BiExecute :public Execute {
             for (int idy = 0; idy < outDim; idy++) {
                 ptr->val[idy] = y[idy][idx];
             }
-            ptr->forward_drop(bTrain, drop_factor / batch.at(0)->drop_value);
         }
 
         drop_mask.copyFromDeviceToHost();

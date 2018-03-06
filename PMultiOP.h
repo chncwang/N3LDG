@@ -60,17 +60,64 @@ class PMultiNode : public Node {
 };
 
 class PMultiExecute :public Execute {
-  public:
+public:
     bool bTrain;
-  public:
-    inline void  forward() {
+    Tensor2D drop_mask;
+    std::vector<dtype*> in_vals1;
+    std::vector<dtype*> in_vals2;
+    std::vector<dtype*> vals;
+    int dim;
+public:
+#if USE_GPU
+    void  forward() {
+        std::cout << "PMultiExecute forward" << std::endl;
+        int count = batch.size();
+#if TEST_CUDA
+        drop_mask.init(dim, count);
+#else
+        drop_mask.initOnDevice(dim, count);
+#endif
+        n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
+                drop_mask.value);
+        for (Node *n : batch) {
+            PMultiNode *pmulti = static_cast<PMultiNode*>(n);
+#if TEST_CUDA
+            pmulti->in1->val.copyFromHostToDevice();
+            pmulti->in2->val.copyFromHostToDevice();
+#endif
+            in_vals1.push_back(pmulti->in1->val.value);
+            in_vals2.push_back(pmulti->in2->val.value);
+            vals.push_back(pmulti->val.value);
+        }
+        n3ldg_cuda::PMultiForward(in_vals1, in_vals2, count, dim,
+                drop_mask.value, drop_factor, vals);
+#if TEST_CUDA
+        drop_mask.copyFromDeviceToHost();
+        for (int i = 0; i < count; ++i) {
+            for (int j = 0; j < dim; ++j) {
+                dtype v = drop_mask[j][i];
+                batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+            }
+        }
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor /
+                    batch.at(0)->drop_value);
+            n3ldg_cuda::Assert(batch[idx]->val.verify(
+                        "PMultiExecute forward"));
+        }
+#endif
+    }
+#else
+    void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain, drop_factor);
+            batch[idx]->forward_drop(bTrain, drop_factor / batch.at(0)->drop_value);
         }
     }
+#endif
 
     inline void backward() {
         int count = batch.size();
@@ -86,7 +133,8 @@ inline PExecute PMultiNode::generate(bool bTrain, dtype cur_drop_factor) {
     PMultiExecute* exec = new PMultiExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
+    exec->drop_factor = cur_drop_factor * drop_value;
+    exec->dim = dim;
     return exec;
 };
 
