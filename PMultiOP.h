@@ -70,7 +70,6 @@ public:
 public:
 #if USE_GPU
     void  forward() {
-        std::cout << "PMultiExecute forward" << std::endl;
         int count = batch.size();
 #if TEST_CUDA
         drop_mask.init(dim, count);
@@ -119,7 +118,48 @@ public:
     }
 #endif
 
-    inline void backward() {
+#if USE_GPU
+    void backward() {
+        int count = batch.size();
+        std::vector<dtype*> losses, vals1, vals2, losses1, losses2;
+        losses.reserve(count);
+        vals1.reserve(count);
+        vals2.reserve(count);
+        losses1.reserve(count);
+        losses2.reserve(count);
+        for (Node *n : batch) {
+            PMultiNode *pmulti = static_cast<PMultiNode*>(n);
+#if TEST_CUDA
+            pmulti->loss.copyFromHostToDevice();
+            pmulti->in1->val.copyFromHostToDevice();
+            pmulti->in2->val.copyFromHostToDevice();
+            pmulti->in1->loss.copyFromHostToDevice();
+            pmulti->in2->loss.copyFromHostToDevice();
+#endif
+            losses.push_back(pmulti->loss.value);
+            vals1.push_back(pmulti->in1->val.value);
+            vals2.push_back(pmulti->in2->val.value);
+            losses1.push_back(pmulti->in1->loss.value);
+            losses2.push_back(pmulti->in2->loss.value);
+        }
+        n3ldg_cuda::PMultiBackward(losses, vals1, vals2, count, dim,
+                drop_mask.value, drop_factor, losses1, losses2);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
+        }
+        for (Node *n : batch) {
+            PMultiNode *pmulti = static_cast<PMultiNode*>(n);
+            n3ldg_cuda::Assert(pmulti->in1->loss.verify(
+                        "PMultiExecute backward in1 loss"));
+            n3ldg_cuda::Assert(pmulti->in2->loss.verify(
+                        "PMultiExecute backward in2 loss"));
+        }
+#endif
+    }
+#else
+    void backward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
@@ -127,6 +167,7 @@ public:
             batch[idx]->backward();
         }
     }
+#endif
 };
 
 inline PExecute PMultiNode::generate(bool bTrain, dtype cur_drop_factor) {

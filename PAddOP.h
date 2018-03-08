@@ -261,7 +261,11 @@ class PAddNode : public Node {
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
-        return Node::typeEqual(other);
+        if (!Node::typeEqual(other)) {
+            return false;
+        }
+        PAddNode *add = static_cast<PAddNode*>(other);
+        return ins.size() == add->ins.size();
     }
 
 };
