@@ -317,14 +317,6 @@ class BiExecute :public Execute {
         n3ldg_cuda::Tanh(activatedEnum, ty.value, ys, y.value, outDim, bTrain,
                 drop_factor, drop_mask.value);
 #if TEST_CUDA
-        for (Node *n : batch) {
-            n->val.copyFromDeviceToHost();
-        }
-        x1.copyFromDeviceToHost();
-        x2.copyFromDeviceToHost();
-        ty.copyFromDeviceToHost();
-        y.copyFromDeviceToHost();
-
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < inDim1; idy++) {
@@ -340,6 +332,16 @@ class BiExecute :public Execute {
             }
         }
         n3ldg_cuda::Assert(x1.verify("BiExecute forward x1"));
+        std::cout << "count:" << count << std::endl;
+        n3ldg_cuda::PrintNums(x2.value, x2.size);
+        std::cout << std::endl;
+        std::cout << "x2 cpu:" << std::endl;
+        for (int i = 0; i < inDim2; ++i) {
+            for (int j = 0; j < count; ++j) {
+                std::cout << "dim:" << i << " count:" << j << " " <<
+                    x2[i][j] << std::endl;
+            }
+        }
         n3ldg_cuda::Assert(x2.verify("BiExecute forward x2"));
 
         ty.mat() = param->W1.val.mat() * x1.mat() + param->W2.val.mat() * x2.mat();
@@ -454,8 +456,8 @@ class BiExecute :public Execute {
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x2.value,
                 param->W2.grad.value, outDim, count, inDim2, true, true, false);
 #if TEST_CUDA
-        n3ldg_cuda::Assert(param->W1.val.verify("uni W1.val initial"));
-        n3ldg_cuda::Assert(param->W2.val.verify("uni W2.val initial"));
+        n3ldg_cuda::Assert(param->W1.val.verify("bi W1.val initial"));
+        n3ldg_cuda::Assert(param->W2.val.verify("bi W2.val initial"));
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(param->W1.val.value, lty.value,
                 lx1.value, inDim1, outDim, count, false, false, true);
