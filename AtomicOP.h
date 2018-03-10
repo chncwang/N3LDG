@@ -162,8 +162,49 @@ class TanhNode :public Node {
 class TanhExecute :public Execute {
   public:
     bool bTrain;
-  public:
-    inline void  forward() {
+    Tensor2D drop_mask;
+    int dim;
+
+#if USE_GPU
+    void forward() {
+        int count = batch.size();
+        std::vector<dtype*> xs, ys;
+        xs.reserve(count);
+        ys.reserve(count);
+        drop_mask.init(dim, count);
+        for (Node *n : batch) {
+            TanhNode *tanh = static_cast<TanhNode*>(n);
+#if TEST_CUDA
+            tanh->in->val.copyFromHostToDevice();
+#endif
+            xs.push_back(tanh->in->val.value);
+            ys.push_back(tanh->val.value);
+        }
+
+        if (bTrain) {
+            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
+                    drop_mask.value);
+        }
+
+        n3ldg_cuda::Tanh(xs, count, dim, drop_mask.value, drop_factor, ys);
+#if TEST_CUDA
+        drop_mask.copyFromDeviceToHost();
+        for (int i = 0; i < count; ++i) {
+            for (int j = 0; j < dim; ++j) {
+                dtype v = drop_mask[j][i];
+                batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+            }
+        }
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain,
+                    drop_factor / batch.at(0)->drop_value);
+            n3ldg_cuda::Assert(batch.at(idx)->val.verify("Tanh forward"));
+        }
+#endif
+    }
+#else
+    void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
@@ -171,6 +212,7 @@ class TanhExecute :public Execute {
             batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
+#endif
 
     inline void backward() {
         int count = batch.size();
@@ -186,7 +228,8 @@ inline PExecute TanhNode::generate(bool bTrain, dtype cur_drop_factor) {
     TanhExecute* exec = new TanhExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor;
+    exec->drop_factor = cur_drop_factor * drop_value;
+    exec->dim = dim;
     return exec;
 };
 

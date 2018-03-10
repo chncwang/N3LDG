@@ -314,8 +314,8 @@ class BiExecute :public Execute {
                     drop_mask.value);
         }
         n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
-        n3ldg_cuda::Tanh(activatedEnum, ty.value, ys, y.value, outDim, bTrain,
-                drop_factor, drop_mask.value);
+        n3ldg_cuda::Activated(activatedEnum, ty.value, ys, y.value, outDim,
+                bTrain, drop_factor, drop_mask.value);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
