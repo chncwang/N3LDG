@@ -332,18 +332,11 @@ class BiExecute :public Execute {
             }
         }
         n3ldg_cuda::Assert(x1.verify("BiExecute forward x1"));
-        std::cout << "count:" << count << std::endl;
-        n3ldg_cuda::PrintNums(x2.value, x2.size);
-        std::cout << std::endl;
-        std::cout << "x2 cpu:" << std::endl;
-        for (int i = 0; i < inDim2; ++i) {
-            for (int j = 0; j < count; ++j) {
-                std::cout << "dim:" << i << " count:" << j << " " <<
-                    x2[i][j] << std::endl;
-            }
+        for (Node *n : batch) {
+            BiNode *bi = static_cast<BiNode*>(n);
+            n3ldg_cuda::Assert(bi->in2->val.verify("BiExecute forward in2"));
         }
         n3ldg_cuda::Assert(x2.verify("BiExecute forward x2"));
-
         ty.mat() = param->W1.val.mat() * x1.mat() + param->W2.val.mat() * x2.mat();
 
         if (param->bUseB) {
