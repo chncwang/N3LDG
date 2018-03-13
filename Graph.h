@@ -96,7 +96,6 @@ class Graph {
             delete execs.at(idx);
         }
         execs.clear();
-        execs.clear();
         nodes.clear();
         free_nodes.clear();
     }
@@ -200,8 +199,8 @@ class Graph {
 
             for (PExecute e : cur_execs) {
                 e->forward();
+                execs.push_back(e);
             }
-            execs = std::move(cur_execs);
 
             //finished nodes
             NodeMap new_free_nodes;

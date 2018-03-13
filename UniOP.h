@@ -508,8 +508,10 @@ class UniExecute :public Execute {
 #endif
             ly_vec.push_back(ptr->loss.value);
         }
-        n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value, y.value,
-                drop_mask.value, drop_factor, lty.value, count, outDim);
+        n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
+        n3ldg_cuda::CalculateLtyForUniBackward(activatedEnum, ly_vec, ty.value,
+                y.value, drop_mask.value, drop_factor, lty.value, count,
+                outDim);
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W.grad.verify(
                     "uni backward W grad initial"));

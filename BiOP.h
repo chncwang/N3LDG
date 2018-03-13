@@ -290,6 +290,7 @@ class BiExecute :public Execute {
 #if TEST_CUDA
         param->W1.val.copyFromHostToDevice();
         param->W2.val.copyFromHostToDevice();
+        param->b.val.copyFromHostToDevice();
 #endif
 
         for (int i = 0; i < batch.size(); ++i) {
@@ -297,25 +298,18 @@ class BiExecute :public Execute {
 #if TEST_CUDA
             n->in1->val.copyFromHostToDevice();
             n->in2->val.copyFromHostToDevice();
+            std::cout << "i:" << i << " node type:" << n->in2->node_type << "addr"
+                << n->in2->val.value << std::endl;
 #endif
             x1s.push_back(n->in1->val.value);
+            std::cout << "begin verify " << n->in2->val.value << std::endl;
+            n3ldg_cuda::Assert(n->in2->val.verify("BiExecute forward in2"));
             x2s.push_back(n->in2->val.value);
             ys.push_back(n->val.value);
         }
 
         n3ldg_cuda::CopyForBiNodeForward(x1s, x2s, param->b.val.value,
                 x1.value, x2.value, ty.value, count, inDim1, inDim2, outDim);
-        n3ldg_cuda::MatrixMultiplyMatrix(param->W1.val.value, x1.value,
-                ty.value, outDim, inDim1, count, param->bUseB);
-        n3ldg_cuda::MatrixMultiplyMatrix(param->W2.val.value, x2.value,
-                ty.value, outDim, inDim2, count, true);
-        if (bTrain) {
-            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
-                    drop_mask.value);
-        }
-        n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
-        n3ldg_cuda::Activated(activatedEnum, ty.value, ys, y.value, outDim,
-                bTrain, drop_factor, drop_mask.value);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
@@ -334,9 +328,27 @@ class BiExecute :public Execute {
         n3ldg_cuda::Assert(x1.verify("BiExecute forward x1"));
         for (Node *n : batch) {
             BiNode *bi = static_cast<BiNode*>(n);
-            n3ldg_cuda::Assert(bi->in2->val.verify("BiExecute forward in2"));
+//            n3ldg_cuda::Assert(bi->in2->val.verify("BiExecute forward in2"));
         }
+//        std::cout << "x2 cpu: size:" << x2.size << std::endl;
+//        for (int i = 0; i < count * inDim2; ++i) {
+//            std::cout << x2[i / count][i % count] << std::endl;
+//        }
         n3ldg_cuda::Assert(x2.verify("BiExecute forward x2"));
+        std::cout << "x2 verified" << std::endl;
+#endif
+        n3ldg_cuda::MatrixMultiplyMatrix(param->W1.val.value, x1.value,
+                ty.value, outDim, inDim1, count, param->bUseB);
+        n3ldg_cuda::MatrixMultiplyMatrix(param->W2.val.value, x2.value,
+                ty.value, outDim, inDim2, count, true);
+        if (bTrain) {
+            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
+                    drop_mask.value);
+        }
+        n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
+        n3ldg_cuda::Activated(activatedEnum, ty.value, ys, y.value, outDim,
+                bTrain, drop_factor, drop_mask.value);
+#if TEST_CUDA
         ty.mat() = param->W1.val.mat() * x1.mat() + param->W2.val.mat() * x2.mat();
 
         if (param->bUseB) {
@@ -438,8 +450,12 @@ class BiExecute :public Execute {
 #endif
             ly_vec.push_back(ptr->loss.value);
         }
-        n3ldg_cuda::CalculateLtyForUniBackward(ly_vec, ty.value, y.value,
-                drop_mask.value, drop_factor, lty.value, count, outDim);
+        n3ldg_cuda::ActivatedEnum activated = ToActivatedEnum(activate);
+        n3ldg_cuda::CalculateLtyForUniBackward(activated, ly_vec, ty.value,
+                y.value, drop_mask.value, drop_factor, lty.value, count,
+                outDim);
+        std::cout << "lty gpu:" << std::endl;
+        n3ldg_cuda::PrintNums(lty.value, count * outDim);
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W1.grad.verify("bi backward W grad initial"));
         n3ldg_cuda::Assert(param->W2.grad.verify("bi backward W grad initial"));
@@ -484,7 +500,16 @@ class BiExecute :public Execute {
             }
         }
 
+        n3ldg_cuda::Assert(ty.verify("BiExecute backward ty"));
+        n3ldg_cuda::Assert(y.verify("BiExecute backward y"));
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
+        std::cout << "lty cpu:" << std::endl;
+        for (int i = 0; i < outDim; ++i) {
+            for (int j = 0; j < count; ++j) {
+                std::cout << lty[i][j] << std::endl;
+            }
+        }
+        n3ldg_cuda::Assert(lty.verify("BiExecute backward lty"));
 
         param->W1.grad.mat() += lty.mat() * x1.mat().transpose();
         param->W2.grad.mat() += lty.mat() * x2.mat().transpose();
