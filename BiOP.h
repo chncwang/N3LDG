@@ -153,7 +153,7 @@ class BiNode : public Node {
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
-    inline bool typeEqual(PNode other) {
+    bool typeEqual(PNode other) override {
         bool result = Node::typeEqual(other);
         if (!result) return false;
 
@@ -166,6 +166,13 @@ class BiNode : public Node {
         }
 
         return true;
+    }
+
+    size_t typeHashCode() const override {
+        void *act = reinterpret_cast<void*>(activate);
+        void *de = reinterpret_cast<void*>(derivate);
+        return Node::typeHashCode() ^ ::typeHashCode(param) ^
+            ::typeHashCode(act) ^ (::typeHashCode(de) << 1);
     }
 
 #if USE_GPU
@@ -304,6 +311,7 @@ class BiExecute :public Execute {
             x1s.push_back(n->in1->val.value);
             std::cout << "begin verify " << n->in2->val.value << std::endl;
             n3ldg_cuda::Assert(n->in2->val.verify("BiExecute forward in2"));
+            std::cout << "in2 dim:" << n->in2->dim << std::endl;
             x2s.push_back(n->in2->val.value);
             ys.push_back(n->val.value);
         }
