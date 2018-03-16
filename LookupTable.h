@@ -303,11 +303,7 @@ public:
         //table->E.val.copyFromHostToDevice();
 #endif
         if (bTrain && drop_factor > 0) {
-#if TEST_CUDA
             drop_mask.init(dim, count);
-#else
-            drop_mask.initOnDevice(dim, count);
-#endif
             n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
                     drop_mask.value);
         }

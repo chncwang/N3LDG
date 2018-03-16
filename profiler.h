@@ -50,6 +50,7 @@ public:
     }
 
     void BeginEvent(const std::string &name) {
+        if (!enabled_) return;
         Elapsed elapsed;
         elapsed.name = name;
         running_events_.push(elapsed);
@@ -58,6 +59,7 @@ public:
     }
 
     void EndEvent() {
+        if (!enabled_) return;
         if (running_events_.empty()) {
             std::cout << "running_events_ empty" << std::endl;
             abort();
@@ -115,12 +117,16 @@ public:
         }
     }
 
+    void SetEnabled(bool enabled) {
+        enabled_ = enabled;
+    }
+
 private:
     Profiler() = default;
     std::map<std::string, Event> event_map_;
     std::stack<Elapsed> running_events_;
     Event *root_ = NULL;
-    ProfilerMode mode_ = ProfilerMode::ANALYSIS;
+    bool enabled_ = false;
 };
 
 }

@@ -71,11 +71,7 @@ public:
 #if USE_GPU
     void  forward() {
         int count = batch.size();
-#if TEST_CUDA
         drop_mask.init(dim, count);
-#else
-        drop_mask.initOnDevice(dim, count);
-#endif
         n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
                 drop_mask.value);
         for (Node *n : batch) {

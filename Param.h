@@ -23,20 +23,23 @@ class Param : public BaseParam {
 
     // allow sparse and dense parameters have different parameter initialization methods
     inline void initial(int outDim, int inDim) {
+#if USE_GPU
+        val.initOnMemoryAndDevice(outDim, inDim);
+#else
         val.init(outDim, inDim);
+#endif
         grad.init(outDim, inDim);
         aux_square.init(outDim, inDim);
         aux_mean.init(outDim, inDim);
-
         dtype bound = sqrt(6.0 / (outDim + inDim + 1));
         val.random(bound);
+        iter = 0;
 #if USE_GPU
         val.copyFromHostToDevice();
-        grad.copyFromHostToDevice();
-        aux_square.copyFromHostToDevice();
-        aux_mean.copyFromHostToDevice();
+        n3ldg_cuda::Memset(grad.value, outDim * inDim, 0.0f);
+        n3ldg_cuda::Memset(aux_square.value, outDim * inDim, 0.0f);
+        n3ldg_cuda::Memset(aux_mean.value, outDim * inDim, 0.0f);
 #endif
-        iter = 0;
     }
 
     inline int outDim() {

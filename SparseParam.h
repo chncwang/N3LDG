@@ -36,7 +36,11 @@ class SparseParam : public BaseParam {
     // allow sparse and dense parameters have different parameter initialization methods
     inline void initial(int outDim, int inDim) {
         //not in the aligned memory pool
+#if USE_GPU
+        val.initOnMemoryAndDevice(inDim, outDim);
+#else
         val.init(inDim, outDim);
+#endif
         dtype bound = sqrt(6.0 / (outDim + inDim));
         //dtype bound = 0.001;
         val.random(bound);
@@ -51,9 +55,9 @@ class SparseParam : public BaseParam {
         dIndexers.init(indexers.c_buf(), indexers.size());
         dIters.init(last_update.c_buf(), last_update.size());
         val.copyFromHostToDevice();
-        grad.copyFromHostToDevice();
-        aux_square.copyFromHostToDevice();
-        aux_mean.copyFromHostToDevice();
+        n3ldg_cuda::Memset(grad.value, grad.size, 0.0f);
+        n3ldg_cuda::Memset(aux_square.value, inDim * outDim, 0.0f);
+        n3ldg_cuda::Memset(aux_mean.value, inDim * outDim, 0.0f);
 #endif
     }
 

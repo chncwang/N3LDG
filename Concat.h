@@ -264,11 +264,7 @@ class ConcatExecute : public Execute {
         int count = batch.size();
         assert(drop_factor < 1);
         if (drop_factor > 0) {
-#if TEST_CUDA
             drop_mask.init(outDim, count);
-#else
-            drop_mask.initOnDevice(outDim, count);
-#endif
             n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
                     drop_mask.value);
         }

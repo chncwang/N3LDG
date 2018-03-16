@@ -331,24 +331,11 @@ class UniExecute :public Execute {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         profiler.BeginEvent("UniExecute forward");
         int count = batch.size();
-#if USE_GPU
-#if TEST_CUDA
         ty.init(outDim, count);
         x.init(inDim, count);
         y.init(outDim, count);
         drop_mask.init(outDim, count);
-        b.init(outDim, count);
-#else
-        ty.initOnDevice(outDim, count);
-        x.initOnDevice(inDim, count);
-        y.initOnDevice(outDim, count);
-        drop_mask.initOnDevice(outDim, count);
-#endif
-#else
-        ty.init(outDim, count);
-        x.init(inDim, count);
-        y.init(outDim, count);
-        drop_mask.init(outDim, count);
+#if TEST_CUDA || !USE_GPU
         b.init(outDim, count);
 #endif
 
@@ -488,15 +475,9 @@ class UniExecute :public Execute {
         int count = batch.size();
         Tensor2D lx, lty, ly;
 #if USE_GPU
-#if TEST_CUDA
         lx.init(inDim, count);
         lty.init(outDim, count);
         ly.init(outDim, count);
-#else
-        lx.initOnDevice(inDim, count);
-        lty.initOnDevice(outDim, count);
-        ly.initOnDevice(outDim, count);
-#endif
 
         std::vector<dtype*> ly_vec;
         ly_vec.reserve(count);
@@ -678,14 +659,11 @@ public:
         profiler.BeginEvent("LinearExecute forward");
         int count = batch.size();
 
-#if TEST_CUDA
         x.init(inDim, count);
         y.init(outDim, count);
+#if TEST_CUDA
         b.init(outDim, count);
-#else
-        x.initOnDevice(inDim, count);
-        y.initOnDevice(outDim, count);
-#endif // TEST_CUDA
+#endif
         std::vector<dtype*> xs, ys;
         xs.reserve(batch.size());
         ys.reserve(batch.size());
@@ -732,13 +710,8 @@ public:
     void backward() {
         int count = batch.size();
         Tensor2D lx, ly;
-#if TEST_CUDA
         lx.init(inDim, count);
         ly.init(outDim, count);
-#else
-        lx.initOnDevice(inDim, count);
-        ly.initOnDevice(outDim, count);
-#endif
 
         std::vector<dtype*> ly_vec;
         ly_vec.reserve(count);

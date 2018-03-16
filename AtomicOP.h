@@ -153,7 +153,7 @@ class TanhNode :public Node {
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
-    inline bool typeEqual(PNode other) {
+    bool typeEqual(PNode other) {
         bool result = Node::typeEqual(other);
         return result;
     }
@@ -186,7 +186,8 @@ class TanhExecute :public Execute {
                     drop_mask.value);
         }
 
-        n3ldg_cuda::Tanh(xs, count, dim, drop_mask.value, drop_factor, ys);
+        n3ldg_cuda::TanhForward(xs, count, dim, drop_mask.value, drop_factor,
+                ys);
 #if TEST_CUDA
         drop_mask.copyFromDeviceToHost();
         for (int i = 0; i < count; ++i) {
@@ -214,7 +215,38 @@ class TanhExecute :public Execute {
     }
 #endif
 
-    inline void backward() {
+#if USE_GPU
+    void backward() {
+        int count = batch.size();
+        std::vector<dtype*> vals, losses, in_losses;
+        vals.reserve(count);
+        losses.reserve(count);
+        in_losses.reserve(count);
+        for (Node *n : batch) {
+            TanhNode *tanh = static_cast<TanhNode*>(n);
+#if TEST_CUDA
+            tanh->loss.copyFromHostToDevice();
+            tanh->in->loss.copyFromHostToDevice();
+#endif
+            vals.push_back(tanh->val.value);
+            losses.push_back(tanh->loss.value);
+            in_losses.push_back(tanh->in->loss.value);
+        }
+        n3ldg_cuda::TanhBackward(losses, vals, count, dim, drop_mask.value,
+                drop_factor, in_losses);
+#if TEST_CUDA
+        for (Node *n : batch) {
+            n->backward_drop();
+            n->backward();
+        }
+        for (Node *n : batch) {
+            TanhNode *tanh = static_cast<TanhNode*>(n);
+            n3ldg_cuda::Assert(tanh->in->loss.verify("TanhExecute backward"));
+        }
+#endif
+    }
+#else
+    void backward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
@@ -222,6 +254,7 @@ class TanhExecute :public Execute {
             batch[idx]->backward();
         }
     }
+#endif
 };
 
 inline PExecute TanhNode::generate(bool bTrain, dtype cur_drop_factor) {

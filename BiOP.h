@@ -105,8 +105,6 @@ class BiNode : public Node {
     inline void clearValue() {
         Node::clearValue();
         in1 = in2 = NULL;
-        ty = 0;
-        lty = 0;
     }
 
     // define the activate function and its derivation form
@@ -276,19 +274,13 @@ class BiExecute :public Execute {
 #if USE_GPU
     void forward() {
         int count = batch.size();
-#if TEST_CUDA
         ty.init(outDim, count);
         x1.init(inDim1, count);
         x2.init(inDim2, count);
         y.init(outDim, count);
         drop_mask.init(outDim, count);
+#if TEST_CUDA
         b.init(outDim, count);
-#else
-        ty.initOnDevice(outDim, count);
-        x1.initOnDevice(inDim1, count);
-        x2.initOnDevice(inDim2, count);
-        y.initOnDevice(outDim, count);
-        drop_mask.initOnDevice(outDim, count);
 #endif
         std::vector<dtype*> x1s, x2s, ys;
         x1s.reserve(count);
@@ -305,13 +297,8 @@ class BiExecute :public Execute {
 #if TEST_CUDA
             n->in1->val.copyFromHostToDevice();
             n->in2->val.copyFromHostToDevice();
-            std::cout << "i:" << i << " node type:" << n->in2->node_type << "addr"
-                << n->in2->val.value << std::endl;
 #endif
             x1s.push_back(n->in1->val.value);
-            std::cout << "begin verify " << n->in2->val.value << std::endl;
-            n3ldg_cuda::Assert(n->in2->val.verify("BiExecute forward in2"));
-            std::cout << "in2 dim:" << n->in2->dim << std::endl;
             x2s.push_back(n->in2->val.value);
             ys.push_back(n->val.value);
         }
@@ -334,16 +321,7 @@ class BiExecute :public Execute {
             }
         }
         n3ldg_cuda::Assert(x1.verify("BiExecute forward x1"));
-        for (Node *n : batch) {
-            BiNode *bi = static_cast<BiNode*>(n);
-//            n3ldg_cuda::Assert(bi->in2->val.verify("BiExecute forward in2"));
-        }
-//        std::cout << "x2 cpu: size:" << x2.size << std::endl;
-//        for (int i = 0; i < count * inDim2; ++i) {
-//            std::cout << x2[i / count][i % count] << std::endl;
-//        }
         n3ldg_cuda::Assert(x2.verify("BiExecute forward x2"));
-        std::cout << "x2 verified" << std::endl;
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(param->W1.val.value, x1.value,
                 ty.value, outDim, inDim1, count, param->bUseB);
@@ -436,17 +414,10 @@ class BiExecute :public Execute {
     void backward() {
         int count = batch.size();
         Tensor2D lx1, lx2, lty, ly;
-#if TEST_CUDA
         lx1.init(inDim1, count);
         lx2.init(inDim2, count);
         lty.init(outDim, count);
         ly.init(outDim, count);
-#else
-        lx1.initOnDevice(inDim1, count);
-        lx2.initOnDevice(inDim2, count);
-        lty.initOnDevice(outDim, count);
-        ly.initOnDevice(outDim, count);
-#endif
 
         std::vector<dtype*> ly_vec;
         ly_vec.reserve(count);
@@ -462,8 +433,20 @@ class BiExecute :public Execute {
         n3ldg_cuda::CalculateLtyForUniBackward(activated, ly_vec, ty.value,
                 y.value, drop_mask.value, drop_factor, lty.value, count,
                 outDim);
-        std::cout << "lty gpu:" << std::endl;
-        n3ldg_cuda::PrintNums(lty.value, count * outDim);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            BiNode* ptr = (BiNode*)batch[idx];
+            ptr->backward_drop();
+            for (int idy = 0; idy < outDim; idy++) {
+                ly[idy][idx] = ptr->loss[idy];
+            }
+        }
+
+        n3ldg_cuda::Assert(ty.verify("BiExecute backward ty"));
+        n3ldg_cuda::Assert(y.verify("BiExecute backward y"));
+        lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
+        n3ldg_cuda::Assert(lty.verify("BiExecute backward lty"));
+#endif
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W1.grad.verify("bi backward W grad initial"));
         n3ldg_cuda::Assert(param->W2.grad.verify("bi backward W grad initial"));
@@ -500,32 +483,13 @@ class BiExecute :public Execute {
                 lty.value, lx1.value, lx2.value, param->b.grad.value,
                 losses1, losses2, count, outDim, inDim1, inDim2);
 #if TEST_CUDA
-        for (int idx = 0; idx < count; idx++) {
-            BiNode* ptr = (BiNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
-            }
-        }
-
-        n3ldg_cuda::Assert(ty.verify("BiExecute backward ty"));
-        n3ldg_cuda::Assert(y.verify("BiExecute backward y"));
-        lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
-        std::cout << "lty cpu:" << std::endl;
-        for (int i = 0; i < outDim; ++i) {
-            for (int j = 0; j < count; ++j) {
-                std::cout << lty[i][j] << std::endl;
-            }
-        }
-        n3ldg_cuda::Assert(lty.verify("BiExecute backward lty"));
-
         param->W1.grad.mat() += lty.mat() * x1.mat().transpose();
         param->W2.grad.mat() += lty.mat() * x2.mat().transpose();
 
         if (param->bUseB) {
             for (int idx = 0; idx < count; idx++) {
                 for (int idy = 0; idy < outDim; idy++) {
-                    param->b.grad.v[idy] += lty[idx][idy];
+                    param->b.grad.v[idy] += lty[idy][idx];
                 }
             }
         }
@@ -536,10 +500,10 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < inDim1; idy++) {
-                ptr->in1->loss[idy] += lx1[idx][idy];
+                ptr->in1->loss[idy] += lx1[idy][idx];
             }
             for (int idy = 0; idy < inDim2; idy++) {
-                ptr->in2->loss[idy] += lx2[idx][idy];
+                ptr->in2->loss[idy] += lx2[idy][idx];
             }
         }
 #endif

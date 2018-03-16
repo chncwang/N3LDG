@@ -260,7 +260,7 @@ class PAddNode : public Node {
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
-    inline bool typeEqual(PNode other) {
+    bool typeEqual(PNode other) {
         if (!Node::typeEqual(other)) {
             return false;
         }
@@ -268,6 +268,9 @@ class PAddNode : public Node {
         return ins.size() == add->ins.size();
     }
 
+    size_t typeHashCode() const override {
+        return (std::hash<int>{}(ins.size()) << 1) ^ Node::typeHashCode();
+    }
 };
 
 
@@ -282,11 +285,7 @@ public:
     void  forward() {
         int count = batch.size();
 
-#if TEST_CUDA
         drop_mask.init(dim, count);
-#else
-        drop_mask.initOnDevice(dim, count);
-#endif
         n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
                 drop_mask.value);
 

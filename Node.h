@@ -214,26 +214,21 @@ class Node {
 #if !USE_GPU || TEST_CUDA
         val = 0;
         loss = 0;
+        if (drop_value > 0) drop_mask = 1;
 #endif
         degree = 0;
-        if (drop_value > 0)drop_mask = 1;
         parents.clear();
     }
 
     virtual inline void init(int ndim, dtype dropout) {
         dim = ndim;
-#if TEST_CUDA || !USE_GPU
         val.init(dim);
         loss.init(dim);
-#else
-        val.initOnDevice(dim);
-        loss.initOnDevice(dim);
-#endif
+        drop_mask.init(dim);
 #if USE_GPU
         n3ldg_cuda::Memset(val.value, dim, 0.0f);
         n3ldg_cuda::Memset(loss.value, dim, 0.0f);
 #endif
-        drop_mask.init(dim);
         if (dropout > 0 && dropout <= 1) {
             drop_value = dropout;
         } else {
