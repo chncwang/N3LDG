@@ -203,7 +203,6 @@ class Graph {
             }
 
             for (PExecute e : cur_execs) {
-                std::cout << e->batch.at(0)->node_type << std::endl;
                 e->forward();
                 execs.push_back(e);
             }

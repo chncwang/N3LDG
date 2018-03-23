@@ -168,7 +168,6 @@ public:
 
     void  forward() {
         int count = batch.size();
-        std::cout << "AttentionSoftMaxExecute count:" << count << std::endl;
         in_counts.reserve(count);
         masks.reserve(count);
         for (Node *n : batch) {
@@ -187,39 +186,40 @@ public:
             p->init(dim, attention->ins.size());
             masks.push_back(p);
         }
+        std::vector<dtype*> ins, unnormeds, vals;
+        int max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
+        ins.reserve(count * max_in_count);
+        unnormeds.reserve(count * max_in_count);
+        vals.reserve(count);
+        for (Node *n : batch) {
+            AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
+            vals.push_back(att->val.value);
+            for (int i = 0; i < att->ins.size(); ++i) {
+                ins.push_back(att->ins.at(i)->val.value);
+                unnormeds.push_back(att->unnormeds.at(i)->val.value);
+            }
+            for (int i = 0; i < max_in_count - att->ins.size(); ++i) {
+                ins.push_back(NULL);
+                unnormeds.push_back(NULL);
+            }
+        }
 
-        std::cout << "before attention forward" << std::endl;
         std::vector<dtype*> raw_masks;
         raw_masks.reserve(count);
         for (auto &p : masks) {
             raw_masks.push_back(p->value);
         }
-        n3ldg_cuda::ScalarAttentionForward(graph_info, in_counts, count, dim,
-                raw_masks);
+        n3ldg_cuda::ScalarAttentionForward(ins, unnormeds, in_counts, count,
+                dim, raw_masks, vals);
 #if TEST_CUDA
         int iter = 0;
         for (Node *n : batch) {
             n->compute();
             AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
-            for (int i = 0; i < att->ins.size(); ++i) {
-                std::cout << "mask:" << att->masks.at(i) << std::endl;
-            }
-            for (int i = 0; i < att->ins.size(); ++i) {
-                std::cout << "in i:" << i << std::endl;
-                for (int j = 0; j < dim; ++j) {
-                    std::cout << "in val:" << att->ins.at(i)->val[j] << std::endl;
-                }
-            }
-            for (int i = 0; i < dim; ++i) {
-                std::cout << "val:" << n->val[i] << std::endl;
-            }
             n3ldg_cuda::Assert(n->val.verify(
                         "AttentionSoftMaxExecute forward"));
-            std::cout << "AttentionSoftMaxExecute forward verified." <<
-                std::endl;
             iter++;
         }
-        std::cout << "AttentionSoftMaxExecute forward asserted" << std::endl;
 #endif
     }
 
