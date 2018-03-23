@@ -12,17 +12,16 @@
 #include "MyLib.h"
 #include "Node.h"
 #include "Graph.h"
-
+#include <memory>
 
 class AttentionSoftMaxNode : public Node {
-  public:
+public:
     vector<dtype> masks, mask_losses;
     vector<dtype> unnormed_masks;
     dtype sum;
     vector<PNode> unnormeds;
     vector<PNode> ins;
 
-  public:
     AttentionSoftMaxNode() : Node() {
         ins.clear();
         unnormeds.clear();
@@ -36,6 +35,23 @@ class AttentionSoftMaxNode : public Node {
         ins.clear();
         unnormeds.clear();
     }
+
+#if USE_GPU
+    void toNodeInfo(NodeInfo &info) const override {
+        Node::toNodeInfo(info);
+        info.input_count = ins.size();
+        info.input_vals.reserve(ins.size() * 2);
+        info.input_losses.reserve(ins.size() * 2);
+        for (PNode p : ins) {
+            info.input_vals.push_back(p->val.value);
+            info.input_losses.push_back(p->loss.value);
+        }
+        for (PNode p : unnormeds) {
+            info.input_vals.push_back(p->val.value);
+            info.input_losses.push_back(p->loss.value);
+        }
+    }
+#endif
 
     inline void clearValue() {
         Node::clearValue();
@@ -142,6 +158,81 @@ class AttentionSoftMaxNode : public Node {
 };
 
 
+#if USE_GPU
+class AttentionSoftMaxExecute : public Execute {
+public:
+    bool bTrain;
+    int dim;
+    std::vector<int> in_counts;
+    std::vector<std::shared_ptr<Tensor2D>> masks;
+
+    void  forward() {
+        int count = batch.size();
+        std::cout << "AttentionSoftMaxExecute count:" << count << std::endl;
+        in_counts.reserve(count);
+        masks.reserve(count);
+        for (Node *n : batch) {
+            AttentionSoftMaxNode *attention =
+                static_cast<AttentionSoftMaxNode*>(n);
+#if TEST_CUDA
+            for (Node *in : attention->ins) {
+                in->val.copyFromHostToDevice();
+            }
+            for (Node *in : attention->unnormeds) {
+                in->val.copyFromHostToDevice();
+            }
+#endif
+            in_counts.push_back(attention->ins.size());
+            auto p = std::make_shared<Tensor2D>();
+            p->init(dim, attention->ins.size());
+            masks.push_back(p);
+        }
+
+        std::cout << "before attention forward" << std::endl;
+        std::vector<dtype*> raw_masks;
+        raw_masks.reserve(count);
+        for (auto &p : masks) {
+            raw_masks.push_back(p->value);
+        }
+        n3ldg_cuda::ScalarAttentionForward(graph_info, in_counts, count, dim,
+                raw_masks);
+#if TEST_CUDA
+        int iter = 0;
+        for (Node *n : batch) {
+            n->compute();
+            AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
+            for (int i = 0; i < att->ins.size(); ++i) {
+                std::cout << "mask:" << att->masks.at(i) << std::endl;
+            }
+            for (int i = 0; i < att->ins.size(); ++i) {
+                std::cout << "in i:" << i << std::endl;
+                for (int j = 0; j < dim; ++j) {
+                    std::cout << "in val:" << att->ins.at(i)->val[j] << std::endl;
+                }
+            }
+            for (int i = 0; i < dim; ++i) {
+                std::cout << "val:" << n->val[i] << std::endl;
+            }
+            n3ldg_cuda::Assert(n->val.verify(
+                        "AttentionSoftMaxExecute forward"));
+            std::cout << "AttentionSoftMaxExecute forward verified." <<
+                std::endl;
+            iter++;
+        }
+        std::cout << "AttentionSoftMaxExecute forward asserted" << std::endl;
+#endif
+    }
+
+    void backward() {
+        int count = batch.size();
+        //#pragma omp parallel for
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
+        }
+    }
+};
+#else
 class AttentionSoftMaxExecute : public Execute {
   public:
     bool bTrain;
@@ -164,12 +255,16 @@ class AttentionSoftMaxExecute : public Execute {
         }
     }
 };
+#endif
 
 inline PExecute AttentionSoftMaxNode::generate(bool bTrain, dtype cur_drop_factor) {
     AttentionSoftMaxExecute* exec = new AttentionSoftMaxExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+#if USE_GPU
+    exec->dim = dim;
+#endif
     return exec;
 }
 
