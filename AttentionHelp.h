@@ -225,7 +225,6 @@ public:
 
     void backward() {
         int count = batch.size();
-        //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward_drop();
             batch[idx]->backward();

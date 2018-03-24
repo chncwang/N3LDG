@@ -484,8 +484,7 @@ class UniExecute :public Execute {
         for (int i = 0; i < count; ++i) {
             UniNode* ptr = (UniNode*)batch[i];
 #if TEST_CUDA
-            n3ldg_cuda::Assert(ptr->loss.verify("uni backward loss"));
-//            ptr->loss.copyFromHostToDevice();
+            ptr->loss.copyFromHostToDevice();
 #endif
             ly_vec.push_back(ptr->loss.value);
         }
@@ -496,13 +495,11 @@ class UniExecute :public Execute {
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W.grad.verify(
                     "uni backward W grad initial"));
-//          param->W.grad.copyFromHostToDevice();
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(lty.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W.val.verify("uni W.val initial"));
-//        param->W.val.copyFromHostToDevice();
 #endif
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, lty.value,
                 lx.value, inDim, outDim, count, false, false, true);
@@ -511,8 +508,7 @@ class UniExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
 #if TEST_CUDA
-            n3ldg_cuda::Assert(ptr->in->loss.verify("uni backward in loss"));
-            //ptr->in->loss.copyFromHostToDevice();
+            ptr->in->loss.copyFromHostToDevice();
 #endif
             losses.push_back(ptr->in->loss.value);
         }
@@ -520,11 +516,10 @@ class UniExecute :public Execute {
 #if TEST_CUDA
         n3ldg_cuda::Assert(
                 param->b.grad.verify("uni backward param b initial"));
-        //param->b.grad.copyFromHostToDevice();
 #endif
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 lty.value, lx.value, param->b.grad.value, losses, count,
-                outDim, inDim);
+                outDim, inDim, param->bUseB);
 
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
@@ -749,7 +744,7 @@ public:
 #endif
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 ly.value, lx.value, param->b.grad.value, losses, count,
-                outDim, inDim);
+                outDim, inDim, param->bUseB);
 
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
