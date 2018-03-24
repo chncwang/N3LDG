@@ -164,7 +164,10 @@ public:
     bool bTrain;
     int dim;
     std::vector<int> in_counts;
+    int max_in_count;
     std::vector<std::shared_ptr<Tensor2D>> masks;
+    std::vector<dtype*> raw_masks;
+    std::vector<dtype*> ins;
 
     void  forward() {
         int count = batch.size();
@@ -186,8 +189,8 @@ public:
             p->init(dim, attention->ins.size());
             masks.push_back(p);
         }
-        std::vector<dtype*> ins, unnormeds, vals;
-        int max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
+        std::vector<dtype*> unnormeds, vals;
+        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
         ins.reserve(count * max_in_count);
         unnormeds.reserve(count * max_in_count);
         vals.reserve(count);
@@ -204,7 +207,6 @@ public:
             }
         }
 
-        std::vector<dtype*> raw_masks;
         raw_masks.reserve(count);
         for (auto &p : masks) {
             raw_masks.push_back(p->value);
@@ -212,23 +214,61 @@ public:
         n3ldg_cuda::ScalarAttentionForward(ins, unnormeds, in_counts, count,
                 dim, raw_masks, vals);
 #if TEST_CUDA
-        int iter = 0;
         for (Node *n : batch) {
             n->compute();
             AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
             n3ldg_cuda::Assert(n->val.verify(
                         "AttentionSoftMaxExecute forward"));
-            iter++;
         }
 #endif
     }
 
     void backward() {
         int count = batch.size();
+        std::vector<dtype*> losses, in_losses, unnormed_losses;
+        losses.reserve(count);
+        in_losses.reserve(count * max_in_count);
+        unnormed_losses.reserve(count * max_in_count);
+
+        for (Node *n : batch) {
+            n->loss.copyFromHostToDevice();
+            losses.push_back(n->loss.value);
+            AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
+            for (int i = 0; i < att->ins.size(); ++i) {
+                att->ins.at(i)->loss.copyFromHostToDevice();
+                in_losses.push_back(att->ins.at(i)->loss.value);
+                att->unnormeds.at(i)->loss.copyFromHostToDevice();
+                unnormed_losses.push_back(att->unnormeds.at(i)->loss.value);
+            }
+            for (int i = 0; i < max_in_count - att->ins.size(); ++i) {
+                in_losses.push_back(NULL);
+                unnormed_losses.push_back(NULL);
+            }
+        }
+
+        n3ldg_cuda::ScalarAttentionBackward(losses, ins, raw_masks, in_counts,
+                count, dim, in_losses, unnormed_losses);
+
+#if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward_drop();
             batch[idx]->backward();
         }
+
+        for (Node *n : batch) {
+            AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
+            for (Node *in : att->ins) {
+                n3ldg_cuda::Assert(in->loss.verify(
+                            "AttentionSoftMaxExecute backward ins"));
+            }
+
+            for (Node *un : att->unnormeds) {
+                n3ldg_cuda::Assert(un->loss.verify(
+                            "AttentionSoftMaxExecute backward unnormeds"));
+            }
+        }
+        std::cout << "asserted" << std::endl;
+#endif
     }
 };
 #else
