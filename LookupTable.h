@@ -299,9 +299,6 @@ public:
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         profiler.BeginEvent("LookupNode forward");
         int count = batch.size();
-#if TEST_CUDA
-        //table->E.val.copyFromHostToDevice();
-#endif
         if (bTrain && drop_factor > 0) {
             drop_mask.init(dim, count);
             n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
@@ -345,14 +342,7 @@ public:
         losses.reserve(count);
         for (Node *n : batch) {
             losses.push_back(n->loss.value);
-#if TEST_CUDA
-            //n->loss.copyFromHostToDevice();
-#endif
         }
-#if TEST_CUDA
-        //table->E.grad.copyFromHostToDevice();
-        //table->E.dIndexers.copyFromHost(table->E.indexers.c_buf());
-#endif
         n3ldg_cuda::LookupBackward(xids, table->nUNKId, table->bFineTune,
                 losses,
                 drop_mask.value,

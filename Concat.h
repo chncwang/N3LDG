@@ -296,25 +296,10 @@ class ConcatExecute : public Execute {
         int count = batch.size();
         std::vector<dtype**> in_losses;
         in_losses.reserve(count);
-        for (int i = 0; i < count; ++i) {
-            ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
-#if TEST_CUDA
-            for (int j = 0; j < inCount; ++j) {
-                //n->ins[j]->loss.copyFromHostToDevice();
-            }
-#endif
-            //in_losses.push_back(n->dInLosses.value); // TODO
-        }
         std::vector<dtype*> out_losses;
         out_losses.reserve(count);
         for (int i = 0; i < count; ++i) {
             ConcatNode *n = static_cast<ConcatNode*>(batch[i]);
-#if TEST_CUDA
-            //n->loss.copyFromHostToDevice();
-            for (int j=0; j < inCount; ++j) {
-                //n->ins[j]->loss.copyFromHostToDevice();
-            }
-#endif
             out_losses.push_back(n->loss.value);
         }
 

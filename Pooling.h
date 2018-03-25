@@ -257,7 +257,6 @@ public:
             for (Node *nn : m->ins) {
                 n3ldg_cuda::Assert(nn->val.verify(
                             "max pooling forward input"));
-                nn->val.copyFromHostToDevice();
             }
 #endif
         }

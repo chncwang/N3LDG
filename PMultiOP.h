@@ -76,10 +76,6 @@ public:
                 drop_mask.value);
         for (Node *n : batch) {
             PMultiNode *pmulti = static_cast<PMultiNode*>(n);
-#if TEST_CUDA
-            pmulti->in1->val.copyFromHostToDevice();
-            pmulti->in2->val.copyFromHostToDevice();
-#endif
             in_vals1.push_back(pmulti->in1->val.value);
             in_vals2.push_back(pmulti->in2->val.value);
             vals.push_back(pmulti->val.value);
@@ -125,13 +121,6 @@ public:
         losses2.reserve(count);
         for (Node *n : batch) {
             PMultiNode *pmulti = static_cast<PMultiNode*>(n);
-#if TEST_CUDA
-            pmulti->loss.copyFromHostToDevice();
-            pmulti->in1->val.copyFromHostToDevice();
-            pmulti->in2->val.copyFromHostToDevice();
-            pmulti->in1->loss.copyFromHostToDevice();
-            pmulti->in2->loss.copyFromHostToDevice();
-#endif
             losses.push_back(pmulti->loss.value);
             vals1.push_back(pmulti->in1->val.value);
             vals2.push_back(pmulti->in2->val.value);

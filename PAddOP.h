@@ -296,9 +296,6 @@ public:
             ins.reserve(count);
             for (PNode n : batch) {
                 PAddNode *padd = static_cast<PAddNode*>(n);
-#if TEST_CUDA
-                padd->ins.at(i)->val.copyFromHostToDevice();
-#endif
                 ins.push_back(padd->ins.at(i)->val.value);
             }
             in_vals.push_back(ins);
@@ -307,9 +304,6 @@ public:
         outs.reserve(count);
         for (PNode n : batch) {
             PAddNode *padd = static_cast<PAddNode*>(n);
-#if TEST_CUDA
-            padd->val.copyFromHostToDevice();
-#endif
             outs.push_back(padd->val.value);
         }
         n3ldg_cuda::PAddForward(in_vals, count, dim, in_count, drop_mask.value,
@@ -352,9 +346,6 @@ public:
             ins.reserve(count);
             for (PNode n : batch) {
                 PAddNode *padd = static_cast<PAddNode*>(n);
-#if TEST_CUDA
-                padd->ins.at(i)->loss.copyFromHostToDevice();
-#endif
                 ins.push_back(padd->ins.at(i)->loss.value);
             }
             in_losses.push_back(ins);
@@ -363,9 +354,6 @@ public:
         out_losses.reserve(count);
         for (PNode n : batch) {
             PAddNode *padd = static_cast<PAddNode*>(n);
-#if TEST_CUDA
-            padd->loss.copyFromHostToDevice();
-#endif
             out_losses.push_back(padd->loss.value);
         }
         n3ldg_cuda::PAddBackward(out_losses, count, dim, in_count,

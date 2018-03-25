@@ -286,18 +286,9 @@ class BiExecute :public Execute {
         x1s.reserve(count);
         x2s.reserve(count);
         ys.reserve(count);
-#if TEST_CUDA
-        param->W1.val.copyFromHostToDevice();
-        param->W2.val.copyFromHostToDevice();
-        param->b.val.copyFromHostToDevice();
-#endif
 
         for (int i = 0; i < batch.size(); ++i) {
             BiNode *n = static_cast<BiNode*>(batch.at(i));
-#if TEST_CUDA
-            n->in1->val.copyFromHostToDevice();
-            n->in2->val.copyFromHostToDevice();
-#endif
             x1s.push_back(n->in1->val.value);
             x2s.push_back(n->in2->val.value);
             ys.push_back(n->val.value);
@@ -423,10 +414,6 @@ class BiExecute :public Execute {
         ly_vec.reserve(count);
         for (int i = 0; i < count; ++i) {
             BiNode* ptr = (BiNode*)batch[i];
-#if TEST_CUDA
-            n3ldg_cuda::Assert(ptr->loss.verify("bi backward loss"));
-            ptr->loss.copyFromHostToDevice();
-#endif
             ly_vec.push_back(ptr->loss.value);
         }
         n3ldg_cuda::ActivatedEnum activated = ToActivatedEnum(activate);
@@ -521,7 +508,7 @@ class BiExecute :public Execute {
             BiNode* ptr = (BiNode*)batch[idx];
             ptr->backward_drop();
             for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
+                ly[idy][idx] = ptr->loss[idy];
             }
         }
 
@@ -533,7 +520,7 @@ class BiExecute :public Execute {
         if (param->bUseB) {
             for (int idx = 0; idx < count; idx++) {
                 for (int idy = 0; idy < outDim; idy++) {
-                    param->b.grad.v[idy] += lty[idx][idy];
+                    param->b.grad.v[idy] += lty[idy][idx];
                 }
             }
         }
@@ -544,10 +531,10 @@ class BiExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];
             for (int idy = 0; idy < inDim1; idy++) {
-                ptr->in1->loss[idy] += lx1[idx][idy];
+                ptr->in1->loss[idy] += lx1[idy][idx];
             }
             for (int idy = 0; idy < inDim2; idy++) {
-                ptr->in2->loss[idy] += lx2[idx][idy];
+                ptr->in2->loss[idy] += lx2[idy][idx];
             }
         }
     }

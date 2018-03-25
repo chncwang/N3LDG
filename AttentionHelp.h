@@ -169,21 +169,13 @@ public:
     std::vector<dtype*> raw_masks;
     std::vector<dtype*> ins;
 
-    void  forward() {
+    void forward() {
         int count = batch.size();
         in_counts.reserve(count);
         masks.reserve(count);
         for (Node *n : batch) {
             AttentionSoftMaxNode *attention =
                 static_cast<AttentionSoftMaxNode*>(n);
-#if TEST_CUDA
-            for (Node *in : attention->ins) {
-                in->val.copyFromHostToDevice();
-            }
-            for (Node *in : attention->unnormeds) {
-                in->val.copyFromHostToDevice();
-            }
-#endif
             in_counts.push_back(attention->ins.size());
             auto p = std::make_shared<Tensor2D>();
             p->init(dim, attention->ins.size());
@@ -231,13 +223,10 @@ public:
         unnormed_losses.reserve(count * max_in_count);
 
         for (Node *n : batch) {
-            n->loss.copyFromHostToDevice();
             losses.push_back(n->loss.value);
             AttentionSoftMaxNode *att = static_cast<AttentionSoftMaxNode*>(n);
             for (int i = 0; i < att->ins.size(); ++i) {
-                att->ins.at(i)->loss.copyFromHostToDevice();
                 in_losses.push_back(att->ins.at(i)->loss.value);
-                att->unnormeds.at(i)->loss.copyFromHostToDevice();
                 unnormed_losses.push_back(att->unnormeds.at(i)->loss.value);
             }
             for (int i = 0; i < max_in_count - att->ins.size(); ++i) {
@@ -267,7 +256,6 @@ public:
                             "AttentionSoftMaxExecute backward unnormeds"));
             }
         }
-        std::cout << "asserted" << std::endl;
 #endif
     }
 };
@@ -442,7 +430,73 @@ class AttentionSoftMaxVNode : public Node {
 
 };
 
+#if TEST_CUDA
+class AttentionSoftMaxVExecute : public Execute {
+public:
+    bool bTrain;
+    int dim;
+    std::vector<int> in_counts;
+    int max_in_count;
+    std::vector<std::shared_ptr<Tensor2D>> masks;
+    std::vector<dtype*> raw_masks;
+    std::vector<dtype*> ins;
 
+    void forward() {
+        int count = batch.size();
+        in_counts.reserve(count);
+        masks.reserve(count);
+        for (Node *n : batch) {
+            AttentionSoftMaxVNode *attention =
+                static_cast<AttentionSoftMaxVNode*>(n);
+            in_counts.push_back(attention->ins.size());
+            auto p = std::make_shared<Tensor2D>();
+            p->init(dim, attention->ins.size());
+            masks.push_back(p);
+        }
+        std::vector<dtype*> unnormeds, vals;
+        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
+        ins.reserve(count * max_in_count);
+        unnormeds.reserve(count * max_in_count);
+        vals.reserve(count);
+        for (Node *n : batch) {
+            AttentionSoftMaxVNode *att =
+                static_cast<AttentionSoftMaxVNode*>(n);
+            vals.push_back(att->val.value);
+            for (int i = 0; i < att->ins.size(); ++i) {
+                ins.push_back(att->ins.at(i)->val.value);
+                unnormeds.push_back(att->unnormeds.at(i)->val.value);
+            }
+            for (int i = 0; i < max_in_count - att->ins.size(); ++i) {
+                ins.push_back(NULL);
+                unnormeds.push_back(NULL);
+            }
+        }
+
+        raw_masks.reserve(count);
+        for (auto &p : masks) {
+            raw_masks.push_back(p->value);
+        }
+        n3ldg_cuda::VectorAttentionForward(ins, unnormeds, in_counts, count,
+                dim, raw_masks, vals);
+#if TEST_CUDA
+        for (Node *n : batch) {
+            n->compute();
+            AttentionSoftMaxVNode *att = static_cast<AttentionSoftMaxVNode*>(n);
+            n3ldg_cuda::Assert(n->val.verify(
+                        "AttentionSoftMaxVExecute forward"));
+        }
+#endif
+    }
+
+    void backward() {
+        int count = batch.size();
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward_drop();
+            batch[idx]->backward();
+        }
+    }
+};
+#else
 class AttentionSoftMaxVExecute : public Execute {
   public:
     bool bTrain;
@@ -465,6 +519,7 @@ class AttentionSoftMaxVExecute : public Execute {
         }
     }
 };
+#endif
 
 inline PExecute AttentionSoftMaxVNode::generate(bool bTrain, dtype cur_drop_factor) {
     AttentionSoftMaxVExecute* exec = new AttentionSoftMaxVExecute();

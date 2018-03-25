@@ -104,8 +104,6 @@ class UniNode : public Node {
     inline void clearValue() {
         Node::clearValue();
         in = NULL;
-        ty = 0;
-        lty = 0;
     }
 
     // define the activate function and its derivation form
@@ -344,17 +342,9 @@ class UniExecute :public Execute {
         xs.reserve(batch.size());
         ys.reserve(batch.size());
 
-#if TEST_CUDA
-        //param->W.val.copyFromHostToDevice();
-        //param->b.val.copyFromHostToDevice();
-#endif
 
         for (int i = 0; i < batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
-
-#if TEST_CUDA
-            //n->in->val.copyFromHostToDevice();
-#endif
 
             xs.push_back(n->in->val.value);
             ys.push_back(n->val.value);
@@ -377,17 +367,7 @@ class UniExecute :public Execute {
 
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
-
-#if TEST_CUDA
-            //n->val.copyFromDeviceToHost();
-#endif
         }
-
-#if TEST_CUDA
-        //x.copyFromDeviceToHost();
-        //y.copyFromDeviceToHost();
-        //ty.copyFromDeviceToHost();
-#endif
 
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
@@ -483,9 +463,6 @@ class UniExecute :public Execute {
         ly_vec.reserve(count);
         for (int i = 0; i < count; ++i) {
             UniNode* ptr = (UniNode*)batch[i];
-#if TEST_CUDA
-            ptr->loss.copyFromHostToDevice();
-#endif
             ly_vec.push_back(ptr->loss.value);
         }
         n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
@@ -507,9 +484,6 @@ class UniExecute :public Execute {
         losses.reserve(count);
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
-#if TEST_CUDA
-            ptr->in->loss.copyFromHostToDevice();
-#endif
             losses.push_back(ptr->in->loss.value);
         }
 
@@ -712,36 +686,21 @@ public:
         ly_vec.reserve(count);
         for (int i = 0; i < count; ++i) {
             UniNode* ptr = (UniNode*)batch[i];
-#if TEST_CUDA
-            ptr->loss.copyFromHostToDevice();
-#endif
             ly_vec.push_back(ptr->loss.value);
         }
         n3ldg_cuda::CalculateLyForLinearBackward(ly_vec, ly.value, count,
                 outDim);
-#if TEST_CUDA
-        param->W.grad.copyFromHostToDevice();
-#endif
         n3ldg_cuda::MatrixMultiplyMatrix(ly.value, x.value,
                 param->W.grad.value, outDim, count, inDim, true, true, false);
-#if TEST_CUDA
-        param->W.val.copyFromHostToDevice();
-#endif
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, ly.value,
                 lx.value, inDim, outDim, count, false, false, true);
         std::vector<dtype*> losses;
         losses.reserve(count);
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
-#if TEST_CUDA
-            ptr->in->loss.copyFromHostToDevice();
-#endif
             losses.push_back(ptr->in->loss.value);
         }
 
-#if TEST_CUDA
-        param->b.grad.copyFromHostToDevice();
-#endif
         n3ldg_cuda::AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
                 ly.value, lx.value, param->b.grad.value, losses, count,
                 outDim, inDim, param->bUseB);
@@ -767,7 +726,7 @@ public:
                 }
             }
         }
-        param->b.grad.verify("backward b grad");
+        n3ldg_cuda::Assert(param->b.grad.verify("backward b grad"));
 
         lx.mat() += param->W.val.mat().transpose() * ly.mat();
         lx.verify("backward lx");
