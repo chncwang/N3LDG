@@ -135,7 +135,6 @@ class Param : public BaseParam {
         }
         if (!isEqual(sumNorm, cuda)) {
             std::cout << "cpu:" << sumNorm << " cuda:" << cuda << std::endl;
-            abort();
         }
         return sumNorm;
 #else

@@ -177,12 +177,17 @@ public:
             AttentionSoftMaxNode *attention =
                 static_cast<AttentionSoftMaxNode*>(n);
             in_counts.push_back(attention->ins.size());
+        }
+        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
+        for (Node *n : batch) {
+            AttentionSoftMaxNode *attention =
+                static_cast<AttentionSoftMaxNode*>(n);
+            in_counts.push_back(attention->ins.size());
             auto p = std::make_shared<Tensor2D>();
-            p->init(dim, attention->ins.size());
+            p->init(dim, max_in_count);
             masks.push_back(p);
         }
         std::vector<dtype*> unnormeds, vals;
-        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
         ins.reserve(count * max_in_count);
         unnormeds.reserve(count * max_in_count);
         vals.reserve(count);
@@ -323,7 +328,9 @@ class AttentionSoftMaxVNode : public Node {
         Node::clearValue();
         ins.clear();
         unnormeds.clear();
+#if !USE_GPU
         sum.zero();
+#endif
     }
 
     inline void setParam(int maxsize) {
@@ -342,7 +349,9 @@ class AttentionSoftMaxVNode : public Node {
             unnormed_masks[idx].init(ndim);
         }
         sum.init(ndim);
+#if !USE_GPU
         sum.zero();
+#endif
     }
 
   public:
@@ -430,7 +439,7 @@ class AttentionSoftMaxVNode : public Node {
 
 };
 
-#if TEST_CUDA
+#if USE_GPU
 class AttentionSoftMaxVExecute : public Execute {
 public:
     bool bTrain;
@@ -444,17 +453,22 @@ public:
     void forward() {
         int count = batch.size();
         in_counts.reserve(count);
+        for (Node *n : batch) {
+            AttentionSoftMaxVNode *attention =
+                static_cast<AttentionSoftMaxVNode*>(n);
+            in_counts.push_back(attention->ins.size());
+        }
+        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
         masks.reserve(count);
         for (Node *n : batch) {
             AttentionSoftMaxVNode *attention =
                 static_cast<AttentionSoftMaxVNode*>(n);
             in_counts.push_back(attention->ins.size());
             auto p = std::make_shared<Tensor2D>();
-            p->init(dim, attention->ins.size());
+            p->init(dim, max_in_count);
             masks.push_back(p);
         }
         std::vector<dtype*> unnormeds, vals;
-        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
         ins.reserve(count * max_in_count);
         unnormeds.reserve(count * max_in_count);
         vals.reserve(count);
@@ -463,7 +477,13 @@ public:
                 static_cast<AttentionSoftMaxVNode*>(n);
             vals.push_back(att->val.value);
             for (int i = 0; i < att->ins.size(); ++i) {
+#if TEST_CUDA
+                n3ldg_cuda::Assert(att->ins.at(i)->val.verify("AttentionSoftMaxVExecute forward initial val"));
+#endif
                 ins.push_back(att->ins.at(i)->val.value);
+#if TEST_CUDA
+                n3ldg_cuda::Assert(att->unnormeds.at(i)->val.verify("AttentionSoftMaxVExecute forward  initial unnormeds"));
+#endif
                 unnormeds.push_back(att->unnormeds.at(i)->val.value);
             }
             for (int i = 0; i < max_in_count - att->ins.size(); ++i) {
@@ -481,7 +501,8 @@ public:
 #if TEST_CUDA
         for (Node *n : batch) {
             n->compute();
-            AttentionSoftMaxVNode *att = static_cast<AttentionSoftMaxVNode*>(n);
+            AttentionSoftMaxVNode *att =
+                static_cast<AttentionSoftMaxVNode*>(n);
             n3ldg_cuda::Assert(n->val.verify(
                         "AttentionSoftMaxVExecute forward"));
         }
@@ -490,10 +511,46 @@ public:
 
     void backward() {
         int count = batch.size();
+        std::vector<dtype*> losses, in_losses, unnormed_losses;
+        losses.reserve(count);
+        in_losses.reserve(count * max_in_count);
+        unnormed_losses.reserve(count * max_in_count);
+
+        for (Node *n : batch) {
+            losses.push_back(n->loss.value);
+            AttentionSoftMaxVNode *att = static_cast<AttentionSoftMaxVNode*>(n);
+            for (int i = 0; i < att->ins.size(); ++i) {
+                in_losses.push_back(att->ins.at(i)->loss.value);
+                unnormed_losses.push_back(att->unnormeds.at(i)->loss.value);
+            }
+            for (int i = 0; i < max_in_count - att->ins.size(); ++i) {
+                in_losses.push_back(NULL);
+                unnormed_losses.push_back(NULL);
+            }
+        }
+
+        n3ldg_cuda::VectorAttentionBackward(losses, ins, raw_masks, in_counts,
+                count, dim, in_losses, unnormed_losses);
+
+#if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward_drop();
             batch[idx]->backward();
         }
+
+        for (Node *n : batch) {
+            AttentionSoftMaxVNode *att = static_cast<AttentionSoftMaxVNode*>(n);
+            for (Node *in : att->ins) {
+                n3ldg_cuda::Assert(in->loss.verify(
+                            "AttentionSoftMaxExecute backward ins"));
+            }
+
+            for (Node *un : att->unnormeds) {
+                n3ldg_cuda::Assert(un->loss.verify(
+                            "AttentionSoftMaxExecute backward unnormeds"));
+            }
+        }
+#endif
     }
 };
 #else
@@ -526,6 +583,9 @@ inline PExecute AttentionSoftMaxVNode::generate(bool bTrain, dtype cur_drop_fact
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+#if USE_GPU
+    exec->dim = dim;
+#endif
     return exec;
 }
 
