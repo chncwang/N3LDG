@@ -210,8 +210,89 @@ class MaxPoolNode : public PoolNode {
 };
 #endif
 
+#if USE_GPU
+class MinPoolNode : public
+#if TEST_CUDA
+                    PoolNode
+#else
+                    Node
+#endif
+{
+public:
+#if !TEST_CUDA
+    vector<PNode> ins;
+#endif
+    MinPoolNode() {
+        node_type = "max-pooling";
+    }
 
+#if TEST_CUDA
+    void setMask() {
+        int nSize = ins.size();
+        int thread_count = 8;
+        while (thread_count < nSize) {
+            thread_count <<= 1;
+        }
 
+        for (int dim_i = 0; dim_i < dim; ++dim_i) {
+            dtype shared_arr[1024];
+            dtype shared_indexers[1024];
+            for (int i = 0; i < 1024; ++i) {
+                shared_arr[i] = i < nSize ? ins[i]->val[dim_i] : INFINITY;
+                shared_indexers[i] = i;
+            }
+            for (int i = (thread_count >> 1); i > 0; i >>= 1) {
+                for (int j = 0; j < i; ++j) {
+                    int plus_i = j + i;
+                    if (shared_arr[j] > shared_arr[plus_i]) {
+                        shared_arr[j] = shared_arr[plus_i];
+                        shared_indexers[j] = shared_indexers[plus_i];
+                    }
+                }
+
+                masks[dim_i] = shared_indexers[0];
+            }
+        }
+    }
+#else
+    void compute() {
+        abort();
+    }
+
+    void backward() {
+        abort();
+    }
+#endif
+
+    void forward(Graph *cg, const vector<PNode>& x) {
+        assert(!x.empty());
+        int nSize = x.size();
+        ins.clear();
+        for (int i = 0; i < nSize; i++) {
+            assert(x[i]->val.dim == dim);
+            ins.push_back(x[i]);
+        }
+
+        degree = 0;
+        for (int i = 0; i < nSize; i++) {
+            ins[i]->addParent(this);
+        }
+
+        cg->addNode(this);
+    }
+
+    void toNodeInfo(NodeInfo &info) const override {
+        Node::toNodeInfo(info);
+        info.input_count = ins.size();
+        for (PNode p : ins) {
+            info.input_vals.push_back(p->val.value);
+            info.input_losses.push_back(p->loss.value);
+        }
+    }
+
+    PExecute generate(bool bTrain, dtype cur_drop_factor) override;
+};
+#else
 class MinPoolNode : public PoolNode {
   public:
     MinPoolNode() : PoolNode() {
@@ -233,8 +314,8 @@ class MinPoolNode : public PoolNode {
             masks[idx] = minIndex;
         }
     }
-
 };
+#endif
 
 #if USE_GPU
 class MaxPoolExecute : public Execute
@@ -260,8 +341,8 @@ public:
             }
 #endif
         }
-        n3ldg_cuda::MaxPoolForward(graph_info, count, in_counts, dim,
-                hit_inputs.value);
+        n3ldg_cuda::PoolForward(n3ldg_cuda::PoolingEnum::MAX, graph_info,
+                count, in_counts, dim, hit_inputs.value);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
@@ -295,7 +376,7 @@ public:
             }
 #endif
         }
-        n3ldg_cuda::MaxPoolBackward(graph_info, in_counts, hit_inputs.value,
+        n3ldg_cuda::PoolBackward(graph_info, in_counts, hit_inputs.value,
                 count, dim);
 
 #if TEST_CUDA
@@ -315,6 +396,91 @@ public:
 
 PExecute MaxPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
     MaxPoolExecute *exec = new MaxPoolExecute;
+    exec->batch.push_back(this);
+    exec->dim = dim;
+    return exec;
+}
+#endif
+
+#if USE_GPU
+class MinPoolExecute : public Execute
+{
+public:
+    int dim;
+    n3ldg_cuda::IntArray hit_inputs;
+    std::vector<int> in_counts;
+
+    void forward() override {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("MinPoolNode forward");
+        int count = batch.size();
+        hit_inputs.init(count * dim);
+        in_counts.reserve(count);
+        for (Node *n : batch) {
+            MinPoolNode *m = static_cast<MinPoolNode*>(n);
+            in_counts.push_back(m->ins.size());
+#if TEST_CUDA
+            for (Node *nn : m->ins) {
+                n3ldg_cuda::Assert(nn->val.verify(
+                            "min pooling forward input"));
+            }
+#endif
+        }
+        n3ldg_cuda::PoolForward(n3ldg_cuda::PoolingEnum::MIN, graph_info,
+                count, in_counts, dim, hit_inputs.value);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+            n3ldg_cuda::Assert(batch[idx]->val.verify("min pooling forward"));
+            MinPoolNode *n = static_cast<MinPoolNode*>(batch[idx]);
+            if (!n3ldg_cuda::Verify(n->masks.data(),
+                        hit_inputs.value + idx * dim, dim,
+                        "mix pooling forward mask")) {
+                for (int i = 0; i < 2; ++i) {
+                    std::cout << "i:" << i << std::endl;
+                    Node *p = n->ins.at(i);
+                    std::cout << n->ins.at(i)->val[37] << std::endl;
+                }
+                abort();
+            }
+        }
+#endif
+        profiler.EndCudaEvent();
+    }
+
+    void backward() override {
+        int count = batch.size();
+        for (Node *n : batch) {
+            MinPoolNode *m = static_cast<MinPoolNode*>(n);
+            n3ldg_cuda::Assert(m->loss.verify("min pooling backward loss"));
+#if TEST_CUDA
+            int in_i = 0;
+            for (Node *in : m->ins) {
+                n3ldg_cuda::Assert(in->loss.verify(
+                            "min pooling backward in loss initial"));
+            }
+#endif
+        }
+        n3ldg_cuda::PoolBackward(graph_info, in_counts, hit_inputs.value,
+                count, dim);
+
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward();
+        }
+
+        for (int idx = 0; idx < count; idx++) {
+            int in_i = 0;
+            for (Node *n : static_cast<MinPoolNode*>(batch[idx])->ins) {
+                n3ldg_cuda::Assert(n->loss.verify("min pooling backward"));
+            }
+        }
+#endif
+    }
+};
+
+PExecute MinPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
+    MinPoolExecute *exec = new MinPoolExecute;
     exec->batch.push_back(this);
     exec->dim = dim;
     return exec;
