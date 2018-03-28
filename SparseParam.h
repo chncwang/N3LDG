@@ -98,6 +98,10 @@ class SparseParam : public BaseParam {
     }
 
     inline void updateAdagrad(dtype alpha, dtype reg, dtype eps) {
+#if USE_GPU
+        n3ldg_cuda::UpdateAdagrad(val.value, grad.value, indexers.size(),
+                grad.col, aux_square.value, dIndexers.value, alpha, reg, eps);
+#if TEST_CUDA
         int inDim = indexers.size();
         for (int index = 0; index < inDim; index++) {
             if (!indexers[index]) continue;
@@ -108,7 +112,19 @@ class SparseParam : public BaseParam {
             }
         }
 
-        val.copyFromHostToDevice();
+        n3ldg_cuda::Assert(val.verify("SparseParam updateAdagrad"));
+#endif
+#else
+        int inDim = indexers.size();
+        for (int index = 0; index < inDim; index++) {
+            if (!indexers[index]) continue;
+            for (int idx = 0; idx < grad.col; idx++) {
+                grad[index][idx] = grad[index][idx] + val[index][idx] * reg;
+                aux_square[index][idx] = aux_square[index][idx] + grad[index][idx] * grad[index][idx];
+                val[index][idx] = val[index][idx] - grad[index][idx] * alpha / sqrt(aux_square[index][idx] + eps);
+            }
+        }
+#endif
     }
 
     inline void updateAdam(dtype belta1, dtype belta2, dtype alpha, dtype reg, dtype eps) {
