@@ -781,7 +781,7 @@ public:
     int max_in_count;
     std::vector<dtype*> in_vals;
 
-    inline void  forward() {
+    void  forward() {
         int count = batch.size();
         in_counts.reserve(count);
         for (Node *n : batch) {
@@ -824,18 +824,35 @@ public:
 #endif
     }
 
-    inline void backward() {
+    void backward() {
         int count = batch.size();
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward();
-        }
-
+        std::vector<dtype*> losses;
+        losses.reserve(count);
+        std::vector<dtype*> in_losses;
+        in_losses.reserve(max_in_count * count);
         for (Node *n : batch) {
             SumPoolNode *sum = static_cast<SumPoolNode*>(n);
-            for (Node *n : sum->ins) {
-                n->loss.copyFromHostToDevice();
+            losses.push_back(n->loss.value);
+            for (Node *in : sum->ins) {
+                in_losses.push_back(in->loss.value);
+            }
+            for (int i = 0; i < max_in_count - sum->ins.size(); ++i) {
+                in_losses.push_back(NULL);
             }
         }
+        n3ldg_cuda::SumPoolBackward(n3ldg_cuda::PoolingEnum::SUM, losses,
+                in_counts, count, dim, in_losses);
+#if TEST_CUDA
+        for (Node *n : batch) {
+            n->backward();
+        }
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            for (Node *in : sum->ins) {
+                n3ldg_cuda::Assert(in->loss.verify("SumPoolExecute backward"));
+            }
+        }
+#endif
     }
 };
 #else
