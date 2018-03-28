@@ -59,6 +59,9 @@ class ModelUpdate {
             sumNorm += _params[idx]->squareGradNorm();
         }
         if (std::isnan(double(sumNorm)) || sumNorm > 1e20) { //too large
+#if USE_GPU
+            abort();
+#endif
             clearGrad();
             return;
         }

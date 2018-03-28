@@ -107,6 +107,8 @@ class SparseParam : public BaseParam {
                 val[index][idx] = val[index][idx] - grad[index][idx] * alpha / sqrt(aux_square[index][idx] + eps);
             }
         }
+
+        val.copyFromHostToDevice();
     }
 
     inline void updateAdam(dtype belta1, dtype belta2, dtype alpha, dtype reg, dtype eps) {

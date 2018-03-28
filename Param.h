@@ -62,10 +62,21 @@ class Param : public BaseParam {
 #endif
     }
 
-    inline void updateAdagrad(dtype alpha, dtype reg, dtype eps) {
+    void updateAdagrad(dtype alpha, dtype reg, dtype eps) {
+#if USE_GPU
+        n3ldg_cuda::UpdateAdagrad(val.value, grad.value, val.row, val.col,
+                aux_square.value, alpha, reg, eps);
+#if TEST_CUDA
         if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
         aux_square.vec() = aux_square.vec() + grad.vec().square();
         val.vec() = val.vec() - grad.vec() * alpha / (aux_square.vec() + eps).sqrt();
+#endif
+#else
+        if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
+        aux_square.vec() = aux_square.vec() + grad.vec().square();
+        val.vec() = val.vec() - grad.vec() * alpha / (aux_square.vec() + eps).sqrt();
+        n3ldg_cuda::Assert(val.verify("Param adagrad"));
+#endif
     }
 
     void updateAdam(dtype belta1, dtype belta2, dtype alpha, dtype reg, dtype eps) {
@@ -76,8 +87,6 @@ class Param : public BaseParam {
         n3ldg_cuda::Assert(aux_mean.verify("Param adam begin aux_mean"));
         n3ldg_cuda::Assert(aux_square.verify("Param adam begin aux_square"));
 #endif
-//        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-//        profiler.BeginEvent("Param adam");
         n3ldg_cuda::UpdateAdam(val.value, grad.value, val.row, val.col,
                 aux_mean.value,
                 aux_square.value,
@@ -95,7 +104,6 @@ class Param : public BaseParam {
         val.vec() = val.vec() - aux_mean.vec() * lr_t / (aux_square.vec() + eps).sqrt();
         n3ldg_cuda::Assert(val.verify("Param adam"));
 #endif
-//        profiler.EndCudaEvent();
 #else
         if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
         aux_mean.vec() = belta1 * aux_mean.vec() + (1 - belta1) * grad.vec();
