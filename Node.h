@@ -374,6 +374,8 @@ n3ldg_cuda::ActivatedEnum ToActivatedEnum(N3LDGActivated func) {
         return n3ldg_cuda::ActivatedEnum::TANH;
     } else if (func == fsigmoid) {
         return n3ldg_cuda::ActivatedEnum::SIGMOID;
+    } else if (func == frelu) {
+        return n3ldg_cuda::ActivatedEnum::RELU;
     } else {
         abort();
     }
