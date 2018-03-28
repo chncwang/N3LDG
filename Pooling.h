@@ -772,7 +772,73 @@ class SumPoolNode : public Node {
 
 };
 
+#if USE_GPU
+class SumPoolExecute : public Execute {
+public:
+    bool bTrain;
+    int dim;
+    std::vector<int> in_counts;
+    int max_in_count;
+    std::vector<dtype*> in_vals;
 
+    inline void  forward() {
+        int count = batch.size();
+        in_counts.reserve(count);
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            in_counts.push_back(sum->ins.size());
+        }
+
+        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
+
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            in_counts.push_back(sum->ins.size());
+        }
+
+        std::vector<dtype*> vals;
+        in_vals.reserve(count * max_in_count);
+        vals.reserve(count);
+
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            vals.push_back(sum->val.value);
+            for (int i = 0; i < sum->ins.size(); ++i) {
+                in_vals.push_back(sum->ins.at(i)->val.value);
+            }
+            for (int i = 0; i < max_in_count - sum->ins.size(); ++i) {
+                in_vals.push_back(NULL);
+            }
+        }
+
+        n3ldg_cuda::SumPoolForward(n3ldg_cuda::PoolingEnum::SUM, in_vals,
+                count, dim, in_counts, vals);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+        }
+
+        for (Node *n : batch) {
+            n3ldg_cuda::Assert(n->val.verify("sum pool forward"));
+        }
+#endif
+    }
+
+    inline void backward() {
+        int count = batch.size();
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward();
+        }
+
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            for (Node *n : sum->ins) {
+                n->loss.copyFromHostToDevice();
+            }
+        }
+    }
+};
+#else
 class SumPoolExecute : public Execute {
   public:
     bool bTrain;
@@ -795,13 +861,16 @@ class SumPoolExecute : public Execute {
         }
     }
 };
+#endif
 
-
-inline PExecute SumPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute SumPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
     SumPoolExecute* exec = new SumPoolExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+#if USE_GPU
+    exec->dim = dim;
+#endif
     return exec;
 }
 
