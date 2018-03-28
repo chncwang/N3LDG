@@ -1146,7 +1146,90 @@ class AvgPoolNode : public Node {
 
 };
 
+#if USE_GPU
+class AvgPoolExecute : public Execute {
+public:
+    bool bTrain;
+    int dim;
+    std::vector<int> in_counts;
+    int max_in_count;
+    std::vector<dtype*> in_vals;
 
+    void  forward() {
+        int count = batch.size();
+        in_counts.reserve(count);
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            in_counts.push_back(sum->ins.size());
+        }
+
+        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
+
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            in_counts.push_back(sum->ins.size());
+        }
+
+        std::vector<dtype*> vals;
+        in_vals.reserve(count * max_in_count);
+        vals.reserve(count);
+
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            vals.push_back(sum->val.value);
+            for (int i = 0; i < sum->ins.size(); ++i) {
+                in_vals.push_back(sum->ins.at(i)->val.value);
+            }
+            for (int i = 0; i < max_in_count - sum->ins.size(); ++i) {
+                in_vals.push_back(NULL);
+            }
+        }
+
+        n3ldg_cuda::SumPoolForward(n3ldg_cuda::PoolingEnum::AVG, in_vals,
+                count, dim, in_counts, vals);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+        }
+
+        for (Node *n : batch) {
+            n3ldg_cuda::Assert(n->val.verify("avg pool forward"));
+        }
+#endif
+    }
+
+    void backward() {
+        int count = batch.size();
+        std::vector<dtype*> losses;
+        losses.reserve(count);
+        std::vector<dtype*> in_losses;
+        in_losses.reserve(max_in_count * count);
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            losses.push_back(n->loss.value);
+            for (Node *in : sum->ins) {
+                in_losses.push_back(in->loss.value);
+            }
+            for (int i = 0; i < max_in_count - sum->ins.size(); ++i) {
+                in_losses.push_back(NULL);
+            }
+        }
+        n3ldg_cuda::SumPoolBackward(n3ldg_cuda::PoolingEnum::AVG, losses,
+                in_counts, count, dim, in_losses);
+#if TEST_CUDA
+        for (Node *n : batch) {
+            n->backward();
+        }
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            for (Node *in : sum->ins) {
+                n3ldg_cuda::Assert(in->loss.verify("AvgPoolExecute backward"));
+            }
+        }
+#endif
+    }
+};
+#else
 class AvgPoolExecute : public Execute {
   public:
     bool bTrain;
@@ -1169,13 +1252,14 @@ class AvgPoolExecute : public Execute {
         }
     }
 };
-
+#endif
 
 inline PExecute AvgPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
     AvgPoolExecute* exec = new AvgPoolExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+    exec->dim = dim;
     return exec;
 }
 
