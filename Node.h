@@ -370,12 +370,17 @@ typedef  Execute* PExecute;
 
 typedef dtype N3LDGActivated(const dtype &x);
 n3ldg_cuda::ActivatedEnum ToActivatedEnum(N3LDGActivated func) {
+    using n3ldg_cuda::ActivatedEnum;
     if (func == ftanh) {
-        return n3ldg_cuda::ActivatedEnum::TANH;
+        return ActivatedEnum::TANH;
     } else if (func == fsigmoid) {
-        return n3ldg_cuda::ActivatedEnum::SIGMOID;
+        return ActivatedEnum::SIGMOID;
     } else if (func == frelu) {
-        return n3ldg_cuda::ActivatedEnum::RELU;
+        return ActivatedEnum::RELU;
+    } else if (func == fleaky_relu) {
+        return ActivatedEnum::LEAKY_RELU;
+    } else if (func == fselu) {
+        return ActivatedEnum::SELU;
     } else {
         abort();
     }
