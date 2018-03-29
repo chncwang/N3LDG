@@ -150,7 +150,7 @@ public:
     }
 
 public:
-    inline PExecute generate(bool bTrain);
+    PExecute generate(bool bTrain, dtype drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -232,7 +232,7 @@ public:
     }
 
 public:
-    inline PExecute generate(bool bTrain);
+    PExecute generate(bool bTrain, dtype drop_factor);
 
     // better to rewrite for deep understanding
     inline bool typeEqual(PNode other) {
@@ -310,7 +310,7 @@ public:
             for (int idy = 0; idy < outDim; idy++) {
                 ptr->val[idy] = y[idx][idy];
             }
-            ptr->forward_drop(bTrain);
+            ptr->forward_drop(bTrain, drop_factor);
         }
     }
 
@@ -410,7 +410,7 @@ public:
             for (int idy = 0; idy < outDim; idy++) {
                 ptr->val[idy] = y[idx][idy];
             }
-            ptr->forward_drop(bTrain);
+            ptr->forward_drop(bTrain, drop_factor);
         }
     }
 
@@ -462,7 +462,7 @@ public:
 };
 
 
-inline PExecute TriNode::generate(bool bTrain) {
+inline PExecute TriNode::generate(bool bTrain, dtype drop_factor) {
     TriExecute* exec = new TriExecute();
     exec->batch.push_back(this);
     exec->inDim1 = param->W1.inDim();
@@ -473,11 +473,12 @@ inline PExecute TriNode::generate(bool bTrain) {
     exec->activate = activate;
     exec->derivate = derivate;
     exec->bTrain = bTrain;
+    exec->drop_factor = drop_factor;
     return exec;
 }
 
 
-inline PExecute LinearTriNode::generate(bool bTrain) {
+inline PExecute LinearTriNode::generate(bool bTrain, dtype drop_factor) {
     LinearTriExecute* exec = new LinearTriExecute();
     exec->batch.push_back(this);
     exec->inDim1 = param->W1.inDim();
@@ -486,6 +487,7 @@ inline PExecute LinearTriNode::generate(bool bTrain) {
     exec->outDim = param->W1.outDim();
     exec->param = param;
     exec->bTrain = bTrain;
+    exec->drop_factor = drop_factor;
     return exec;
 }
 #elif USE_BASE
@@ -524,11 +526,12 @@ public:
     }
 };
 
-inline PExecute TriNode::generate(bool bTrain) {
+inline PExecute TriNode::generate(bool bTrain, dtype drop_factor) {
     TriExecute* exec = new TriExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->dim = dim;
+    exec->drop_factor = drop_factor;
     return exec;
 };
 
@@ -557,10 +560,11 @@ public:
     }
 };
 
-inline PExecute LinearTriNode::generate(bool bTrain) {
+inline PExecute LinearTriNode::generate(bool bTrain, dtype drop_factor) {
     LinearTriExecute* exec = new LinearTriExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
+    exec->drop_factor = drop_factor;
     return exec;
 };
 #else
@@ -775,7 +779,7 @@ public:
 };
 
 
-inline PExecute TriNode::generate(bool bTrain) {
+inline PExecute TriNode::generate(bool bTrain, dtype drop_factor) {
     TriExecute* exec = new TriExecute();
     exec->batch.push_back(this);
     exec->inDim1 = param->W1.inDim();
@@ -786,6 +790,7 @@ inline PExecute TriNode::generate(bool bTrain) {
     exec->activate = activate;
     exec->derivate = derivate;
     exec->bTrain = bTrain;
+    exec->drop_factor = drop_factor;
     return exec;
 }
 
