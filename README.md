@@ -17,7 +17,12 @@ Prerequisition 2:
 
 You can get CMake from https://cmake.org/install/
 
-If have any problems, please mason.zms@gmail.com
+Prerequisition 3:
+&ensp;&ensp;&ensp;&ensp;***cuda 8*** 
+
+You can get cuda 8 from https://developer.nvidia.com/cuda-80-ga2-download-archive
+
+If have any problems, please send an email to mason.zms@gmail.com
 
 Examples:
 ====
@@ -29,6 +34,10 @@ https://github.com/yunan4nlp/N3LDGClassifier
 
 https://github.com/yunan4nlp/N3LDGSemiCRFSegmentation-SegDemo
 
+for cuda usage, see:
+
+https://github.com/chncwang/news-title-classification
+
 Author:
 ====
-Zhang Meishan,Li Zhenghua,Yu Nan
+Zhang Meishan, Li Zhenghua, Wang Qiansheng, Yu Nan
