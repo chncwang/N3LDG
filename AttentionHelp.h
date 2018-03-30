@@ -86,7 +86,7 @@ public:
         unnormeds.clear();
         for (int i = 0; i < nSize; i++) {
             if (x[i]->val.dim != dim || a[i]->val.dim != 1) {
-                std::cout << "AttentionHelp - forward - input matrixes are not matched" << std::endl;
+                std::cout << "input matrixes are not matched" << std::endl;
                 clearValue();
                 return;
             }

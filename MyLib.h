@@ -17,7 +17,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "Def.h"
 #include "NRMat.h"
 #include "Eigen/Dense"
 #include "Def.h"
@@ -27,7 +26,6 @@ using namespace std;
 using namespace Eigen;
 
 
->>>>>>> official
 typedef long long blong;
 
 const static dtype minlogvalue = -1000;
@@ -744,22 +742,6 @@ inline void addAllItems(vector<A>& target, const vector<A>& sources) {
     for (int idx = 0; idx < count; idx++) {
         target.push_back(sources[idx]);
     }
-}
-
-
-template <typename T, typename S>
-std::vector<S *> toPointers(std::vector<T> &v, int size) {
-    std::vector<S *> pointers;
-    for (int i = 0; i < size; ++i) {
-        pointers.push_back(&v.at(i));
-    }
-    return pointers;
-}
-
-
-template <typename T, typename S>
-std::vector<S *> toPointers(std::vector<T> &v) {
-    return toPointers<T, S>(v, v.size());
 }
 
 

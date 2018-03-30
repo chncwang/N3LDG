@@ -49,6 +49,7 @@ class WindowBuilder {
         _outDim = 0;
     }
 
+
     inline void init(int inDim, int context) {
         _context = context;
         _window = 2 * _context + 1;

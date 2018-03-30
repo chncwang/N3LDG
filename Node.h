@@ -184,18 +184,17 @@ int GraphToMemory(const std::vector<std::vector<NodeInfo>> &graph,
 // one Node means a vector
 // the col should be 1, because we aimed for NLP only
 class Node {
-public:
+  public:
     vector<Node*> parents;
-public:
+  public:
     Tensor1D val;
     Tensor1D loss;
-
-public:
+  public:
     int dim;
     int degree;
     string node_type;
 
-public:
+  public:
     Tensor1D drop_mask;
     dtype drop_value;
 
@@ -210,7 +209,7 @@ public:
 
     virtual ~Node() = default;
 
-public:
+  public:
     virtual inline void clearValue() {
 #if !USE_GPU || TEST_CUDA
         val = 0;
@@ -222,7 +221,6 @@ public:
     }
 
     virtual inline void init(int ndim, dtype dropout) {
-        n3ldg_assert(ndim > 0, "dim should be a positive integer but is " << ndim);
         dim = ndim;
         val.init(dim);
         loss.init(dim);
@@ -271,15 +269,9 @@ public:
         }
     }
 
-<<<<<<< HEAD
-public:
-    virtual void compute() {}
-    virtual void backward() {}
-=======
   public:
     virtual inline void compute() = 0;
     virtual inline void backward() = 0;
->>>>>>> official
 
     virtual inline Execute* generate(bool bTrain, dtype cur_drop_factor) = 0;
 
@@ -303,7 +295,7 @@ public:
             (std::hash<int>{}((int)(10000 * drop_value)) << 1);
     }
 
-public:
+  public:
     virtual inline void addParent(Node* parent) {
         if (degree >= 0) {
             parents.push_back(parent);

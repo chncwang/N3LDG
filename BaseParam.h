@@ -14,18 +14,9 @@
 
 #include "MyTensor.h"
 
-#if USE_GPU
-#include "n3ldg_cuda.h"
-#endif
-
 struct BaseParam {
-#if USE_GPU
-    n3ldg_cuda::Tensor2D val;
-    n3ldg_cuda::Tensor2D grad;
-#else
     Tensor2D val;
     Tensor2D grad;
-#endif
   public:
     virtual inline void initial(int outDim, int inDim) = 0;
     virtual inline void updateAdagrad(dtype alpha, dtype reg, dtype eps) = 0;

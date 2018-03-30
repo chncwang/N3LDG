@@ -14,16 +14,19 @@
 #include "LookupTable.h"
 #include "Param.h"
 #include "SparseParam.h"
+#include "APParam.h"
 #include "ModelUpdate.h"
 #include "CheckGrad.h"
 #include "Pooling.h"
 #include "Concat.h"
 #include "Windowlized.h"
 #include "UniOP.h"
+#include "BiOP.h"
+#include "TriOP.h"
+#include "FourOP.h"
+#include "Biaffine.h"
+#include "LSTM1.h"
 #include "SoftMaxLoss.h"
-<<<<<<< HEAD
-#include "SparseOP.h"
-=======
 #include "TransferOP.h"
 #include "AttentionHelp.h"
 #include "Attention.h"
@@ -31,6 +34,5 @@
 #include "SparseOP.h"
 #include "ActionOP.h"
 #include "LogSoftMax.h"
->>>>>>> official
 
 #endif

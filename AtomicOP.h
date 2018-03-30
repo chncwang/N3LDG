@@ -25,8 +25,6 @@ PDotNode
 #include "Graph.h"
 #include "ModelUpdate.h"
 
-#if USE_GPU
-#else 
 class ActivateNode :public Node {
   public:
     PNode in;
@@ -83,49 +81,6 @@ class ActivateNode :public Node {
     }
 };
 
-class ActivateExecute :public Execute {
-  public:
-    bool bTrain;
-
-  public:
-    ~ActivateExecute() {
-        sumDim = 0;
-        activate = NULL;
-        derivate = NULL;
-    }
-
-  public:
-    inline void  forward() {
-        int count = batch.size();
-
-        sumDim = 0;
-        for (int idx = 0; idx < count; idx++) {
-            sumDim += batch[idx]->dim;
-        }
-
-        x.init(sumDim);
-        y.init(sumDim);
-
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                x[offset + idy] = ptr->in->val[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        y.vec() = x.vec().unaryExpr(ptr_fun(activate));
-
-        offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ptr->val[idy] = y[offset + idy];
-            }
-            offset += ptr->dim;
-            ptr->forward_drop(bTrain);
-=======
 
 class ActivateExecute :public Execute {
   public:
@@ -135,34 +90,12 @@ class ActivateExecute :public Execute {
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
             batch[idx]->forward_drop(bTrain, drop_factor);
->>>>>>> official
         }
     }
 
     inline void backward() {
-<<<<<<< HEAD
-        Tensor1D lx, ly;
-        lx.init(sumDim);
-        ly.init(sumDim);
-
-        int count = batch.size();
-        int offset = 0;
-        for (int idx = 0; idx < count; idx++) {
-            ActivateNode* ptr = (ActivateNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < ptr->dim; idy++) {
-                ly[offset + idy] = ptr->loss[idy];
-            }
-            offset += ptr->dim;
-        }
-
-        lx.vec() = ly.vec() * x.vec().binaryExpr(y.vec(), ptr_fun(derivate));
-
-        offset = 0;
-=======
         int count = batch.size();
         //#pragma omp parallel for
->>>>>>> official
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->backward_drop();
             batch[idx]->backward();
@@ -400,10 +333,7 @@ inline PExecute SigmoidNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->drop_factor = cur_drop_factor;
     return exec;
 };
-<<<<<<< HEAD
-=======
 
->>>>>>> official
 
 class ReluNode :public Node {
   public:
@@ -480,10 +410,7 @@ inline PExecute ReluNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->drop_factor = cur_drop_factor;
     return exec;
 };
-<<<<<<< HEAD
-=======
 
->>>>>>> official
 
 class IndexNode :public Node {
   public:
@@ -736,57 +663,5 @@ inline PExecute PDotNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->drop_factor = cur_drop_factor;
     return exec;
 }
-
-class GrlNode : public Node {
-public:
-    PNode in = NULL;
-    float ratio = 1.0;
-
-    GrlNode() {
-        node_type = "grl";
-    }
-
-    void forward(Graph *graph, PNode x) {
-        in = x;
-        degree = 0;
-        in->addParent(this);
-        graph->addNode(this);
-    }
-
-    void compute() {
-        val.vec() = in->val.vec();
-    }
-
-    void backward() {
-        in->loss.vec() = loss.vec() * ratio;
-    }
-
-    PExecute generate(bool bTrain) override;
-};
-
-class GrlExecute : public Execute {
-public:
-    void forward() override {
-        for (Node *node : batch) {
-            GrlNode *grl_node = static_cast<GrlNode *>(node);
-            grl_node->compute();
-        }
-    }
-
-    void backward() override {
-        for (Node *node : batch) {
-            GrlNode *grl_node = static_cast<GrlNode *>(node);
-            grl_node->backward();
-        }
-    }
-};
-
-
-PExecute GrlNode::generate(bool bTrain) {
-    GrlExecute* execute = new GrlExecute();
-    execute->batch.push_back(this);
-    return execute;
-}
-#endif
 
 #endif

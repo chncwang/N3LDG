@@ -2,7 +2,6 @@
 #define _ALPHABET_
 
 #include "MyLib.h"
-#include <unordered_set>
 
 /*
  please check to ensure that m_size not exceeds the upbound of int
@@ -155,11 +154,11 @@ class basic_quark {
         }
     }
 
-    void initial(const unordered_map<string, int>& elem_stat, int cutOff, const std::unordered_set<std::string> &required_words) {
+    void initial(const unordered_map<string, int>& elem_stat, int cutOff = 0) {
         clear();
         unordered_map<string, int>::const_iterator elem_iter;
         for (elem_iter = elem_stat.begin(); elem_iter != elem_stat.end(); elem_iter++) {
-            if (elem_iter->second > cutOff || required_words.find(elem_iter->first) != required_words.end()) {
+            if (elem_iter->second > cutOff) {
                 from_string(elem_iter->first);
             }
         }

@@ -22,6 +22,7 @@ class PoolNode : public Node {
     vector<int> masks;
     vector<PNode> ins;
 
+  public:
     PoolNode() : Node() {
         ins.clear();
         masks.clear();
@@ -59,7 +60,7 @@ class PoolNode : public Node {
         ins.clear();
         for (int i = 0; i < nSize; i++) {
             if (x[i]->val.dim != dim) {
-                std::cout << "Pooling - forward - input matrixes are not matched" << std::endl;
+                std::cout << "input matrixes are not matched" << std::endl;
                 clearValue();
                 return;
             }
@@ -1224,7 +1225,6 @@ public:
 };
 #else
 class AvgPoolExecute : public Execute {
->>>>>>> official
   public:
     inline void  forward() {
         int count = batch.size();

@@ -10,13 +10,6 @@
 
 #include "BaseParam.h"
 
-#if USE_GPU
-using n3ldg_cuda::Tensor1D;
-using n3ldg_cuda::Tensor2D;
-#else
-using n3ldg_cpu::Tensor1D;
-using n3ldg_cpu::Tensor2D;
-#endif
 // Notice: aux_square is an aux_squareiliary variable to help parameter updating
 // The in-out dimension definiation is different with dense parameters.
 class SparseParam : public BaseParam {
@@ -264,13 +257,8 @@ class SparseParam : public BaseParam {
 #endif
     }
 
-<<<<<<< HEAD
-    void value(const int& featId, Tensor1D& out) {
-        if (out.dim != val.row) {
-=======
     inline void value(const int& featId, Tensor1D& out) {
         if (out.dim != val.col) {
->>>>>>> official
             std::cout << "warning: output dim not equal lookup param dim." << std::endl;
         }
         for (int idx = 0; idx < val.col; idx++) {
@@ -316,8 +304,6 @@ class SparseParam : public BaseParam {
             }
         }
     }
-<<<<<<< HEAD
-=======
 
     inline void save(std::ofstream &os)const {
         val.save(os);
@@ -341,7 +327,6 @@ class SparseParam : public BaseParam {
         }
     }
 
->>>>>>> official
 };
 
 #endif /* SPARSEPARAM_H_ */

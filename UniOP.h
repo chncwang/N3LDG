@@ -44,6 +44,23 @@ class UniParams {
             b.initial(nOSize, 1);
         }
     }
+
+    inline void save(std::ofstream &os) const {
+        os << bUseB << std::endl;
+        W.save(os);
+        if (bUseB) {
+            b.save(os);
+        }
+    }
+
+    inline void load(std::ifstream &is) {
+        is >> bUseB;
+        W.load(is);
+        if (bUseB) {
+            b.load(is);
+        }
+    }
+
 };
 
 
@@ -68,9 +85,6 @@ class UniNode : public Node {
         param = NULL;
         node_type = "uni";
     }
-
-    UniNode(const UniNode &) = default;
-    UniNode(UniNode &&) = default;
 
     ~UniNode() {
         in = NULL;
@@ -236,15 +250,13 @@ class LinearNode : public Node {
     PNode in;
     UniParams* param;
 
+  public:
     LinearNode() : Node() {
         in = NULL;
         param = NULL;
         node_type = "linear";
     }
 
-    LinearNode(LinearNode&&) = default;
-
-    LinearNode(const LinearNode &) = delete;
 
     inline void setParam(UniParams* paramInit) {
         param = paramInit;
@@ -302,260 +314,6 @@ class LinearNode : public Node {
 #endif
 };
 
-<<<<<<< HEAD
-#if USE_GPU
-class UniExecute :public Execute {
-  public:
-    Tensor2D x, ty, b, y;
-    int inDim, outDim;
-    UniParams* param;
-    dtype(*activate)(const dtype&);   // activation function
-    dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
-    bool bTrain;
-
-    inline void forward() {
-        int count = batch.size();
-        ty.init(outDim, count);
-        x.init(inDim, count);
-        b.init(outDim, count);
-        y.init(outDim, count);
-        for (int idx = 0; idx < count; idx++) {
-            UniNode* ptr = (UniNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->in->val[idy];
-            }
-            if (param->bUseB) {
-                for (int idy = 0; idy < outDim; idy++) {
-                    b[idx][idy] = param->b.val.v[idy];
-                }
-            }
-        }
-
-        ty.mat() = param->W.val.mat() * x.mat();
-
-        if (param->bUseB) {
-            ty.vec() = ty.vec() + b.vec();
-        }
-
-        y.vec() = ty.vec().unaryExpr(ptr_fun(activate));
-
-        for (int idx = 0; idx < count; idx++) {
-            UniNode* ptr = (UniNode*)batch[idx];
-            for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
-            }
-        }
-
-        std::vector<dtype*> xs, ys;
-        xs.reserve(batch.size());
-        ys.reserve(batch.size());
-        param->W.val.copyFromHostToDevice();
-        param->b.val.copyFromHostToDevice();
-        for (int i = 0; i < batch.size(); ++i) {
-            UniNode *n = static_cast<UniNode*>(batch.at(i));
-            n->in->val.copyFromHostToDevice();
-            xs.push_back(n->in->val.value);
-            ys.push_back(n->val.value);
-        }
-        n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value, x.value,
-                ty.value,
-                count,
-                inDim,
-                outDim);
-        n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
-                ty.value,
-                outDim,
-                inDim,
-                count,
-                param->bUseB);
-        n3ldg_cuda::Tanh(ty.value, ys, y.value, outDim);
-        for (int i = 0; i<batch.size(); ++i) {
-            UniNode *n = static_cast<UniNode*>(batch.at(i));
-            n->val.copyFromDeviceToHost();
-        }
-        x.copyFromDeviceToHost();
-        y.copyFromDeviceToHost();
-        ty.copyFromDeviceToHost();
-        b.copyFromDeviceToHost();
-    }
-
-    inline void backward() {
-        int count = batch.size();
-        Tensor2D lx, lty, ly;
-        lx.init(inDim, count);
-        lty.init(outDim, count);
-        ly.init(outDim, count);
-
-        for (int idx = 0; idx < count; idx++) {
-            UniNode* ptr = (UniNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
-            }
-        }
-
-        lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
-
-        param->W.grad.mat() += lty.mat() * x.mat().transpose();
-
-        if (param->bUseB) {
-            for (int idx = 0; idx < count; idx++) {
-                for (int idy = 0; idy < outDim; idy++) {
-                    param->b.grad.v[idy] += lty[idx][idy];
-                }
-            }
-        }
-
-        lx.mat() += param->W.val.mat().transpose() * lty.mat();
-
-        for (int idx = 0; idx < count; idx++) {
-            UniNode* ptr = (UniNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
-            }
-        }
-    }
-};
-
-class LinearUniExecute :public Execute {
-  public:
-    Tensor2D x, y, b;
-    int inDim, outDim, count;
-    UniParams* param;
-    bool bTrain;
-
-  public:
-    inline void  forward() {
-        count = batch.size();
-        x.init(inDim, count);
-        b.init(outDim, count);
-        y.init(outDim, count);
-
-
-        for (int idx = 0; idx < count; idx++) {
-            LinearUniNode* ptr = (LinearUniNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->in->val[idy];
-            }
-            if (param->bUseB) {
-                for (int idy = 0; idy < outDim; idy++) {
-                    b[idx][idy] = param->b.val.v[idy];
-                }
-            }
-        }
-
-        y.mat() = param->W.val.mat() * x.mat();
-
-        if (param->bUseB) {
-            y.vec() += b.vec();
-        }
-
-        for (int idx = 0; idx < count; idx++) {
-            LinearUniNode* ptr = (LinearUniNode*)batch[idx];
-            for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
-            }
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        Tensor2D lx, ly;
-        lx.init(inDim, count);
-        ly.init(outDim, count);
-
-        for (int idx = 0; idx < count; idx++) {
-            LinearUniNode* ptr = (LinearUniNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
-            }
-        }
-
-        param->W.grad.mat() += ly.mat() * x.mat().transpose();
-
-        if (param->bUseB) {
-            for (int idx = 0; idx < count; idx++) {
-                for (int idy = 0; idy < outDim; idy++) {
-                    param->b.grad.v[idy] += ly[idx][idy];
-                }
-            }
-        }
-
-        lx.mat() += param->W.val.mat().transpose() * ly.mat();
-
-        for (int idx = 0; idx < count; idx++) {
-            LinearUniNode* ptr = (LinearUniNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
-            }
-        }
-
-    }
-};
-
-
-class LinearExecute :public Execute {
-  public:
-    Tensor2D x, y;
-    int inDim, outDim, count;
-    UniParams* param;
-    bool bTrain;
-
-  public:
-    inline void  forward() {
-        count = batch.size();
-        x.init(inDim, count);
-        y.init(outDim, count);
-
-
-        for (int idx = 0; idx < count; idx++) {
-            LinearNode* ptr = (LinearNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                x[idx][idy] = ptr->in->val[idy];
-            }
-        }
-
-        y.mat() = param->W.val.mat() * x.mat();
-
-        for (int idx = 0; idx < count; idx++) {
-            LinearNode* ptr = (LinearNode*)batch[idx];
-            for (int idy = 0; idy < outDim; idy++) {
-                ptr->val[idy] = y[idx][idy];
-            }
-            ptr->forward_drop(bTrain);
-        }
-    }
-
-    inline void backward() {
-        Tensor2D lx, ly;
-        lx.init(inDim, count);
-        ly.init(outDim, count);
-
-        for (int idx = 0; idx < count; idx++) {
-            LinearNode* ptr = (LinearNode*)batch[idx];
-            ptr->backward_drop();
-            for (int idy = 0; idy < outDim; idy++) {
-                ly[idx][idy] = ptr->loss[idy];
-            }
-        }
-
-        param->W.grad.mat() += ly.mat() * x.mat().transpose();
-
-        lx.mat() += param->W.val.mat().transpose() * ly.mat();
-
-        for (int idx = 0; idx < count; idx++) {
-            LinearNode* ptr = (LinearNode*)batch[idx];
-            for (int idy = 0; idy < inDim; idy++) {
-                ptr->in->loss[idy] += lx[idx][idy];
-            }
-        }
-
-    }
-};
-
-=======
->>>>>>> official
 
 class UniExecute :public Execute {
   public:

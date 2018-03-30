@@ -12,11 +12,14 @@ using namespace Eigen;
 namespace n3ldg_cpu {
 
 struct Tensor1D {
+  private:
+    size_t memsize;
   public:
     dtype *v;
     int dim;
 
     Tensor1D() {
+        memsize = 0;
         dim = 0;
         v = NULL;
     }
@@ -26,6 +29,7 @@ struct Tensor1D {
             delete[] v;
         }
         v = NULL;
+        memsize = 0;
         dim = 0;
     }
 
@@ -34,11 +38,12 @@ struct Tensor1D {
     inline void init(int ndim) {
         dim = ndim;
         v = new dtype[dim];
+        memsize = dim * sizeof(dtype);
         zero();
     }
 
     inline void zero() {
-        if(v)memset((void*)v, 0, dim * sizeof(dtype));;
+        if(v)memset((void*)v, 0, memsize);;
     }
 
     const Mat mat() const {
@@ -128,12 +133,16 @@ struct Tensor1D {
 
 
 struct Tensor2D {
+  private:
+    size_t memsize;
   public:
     dtype *v;
-    int col, row;
+    int col, row, size;
 
     Tensor2D() {
+        memsize = 0;
         col = row = 0;
+        size = 0;
         v = NULL;
     }
 
@@ -141,33 +150,25 @@ struct Tensor2D {
         if (v) {
             delete[] v;
         }
-    }
-
-    int size() const {
-        return col * row;
+        v = NULL;
+        memsize = 0;
+        col = row = 0;
+        size = 0;
     }
 
     //please call this function before using it really. must! must! must!
     //only this function allocates memories
     inline void init(int nrow, int ncol) {
         row = nrow;
-<<<<<<< HEAD
-        v = new dtype[size()];
-=======
         col = ncol;
         size = col * row;
         v = new dtype[size];
         memsize = size * sizeof(dtype);
->>>>>>> official
         zero();
     }
 
     inline void zero() {
-<<<<<<< HEAD
-        if(v)memset((void*)v, 0, col * row * sizeof(dtype));;
-=======
         if(v)memset((void*)v, 0, memsize);
->>>>>>> official
     }
 
     const Mat mat() const {
@@ -179,11 +180,11 @@ struct Tensor2D {
     }
 
     const Vec vec() const {
-        return Vec(v, size());
+        return Vec(v, size);
     }
 
     Vec vec() {
-        return Vec(v, size());
+        return Vec(v, size);
     }
 
 
@@ -200,13 +201,13 @@ struct Tensor2D {
 
     //use it carefully
     inline Tensor2D& operator=(const dtype &a) { // assign a to every element
-        for (int i = 0; i < size(); i++)
+        for (int i = 0; i < size; i++)
             v[i] = a;
         return *this;
     }
 
     inline Tensor2D& operator=(const vector<dtype> &a) { // assign a to every element
-        for (int i = 0; i < size(); i++)
+        for (int i = 0; i < size; i++)
             v[i] = a[i];
         return *this;
     }
@@ -234,14 +235,14 @@ struct Tensor2D {
     }
 
     inline Tensor2D& operator=(const Tensor2D &a) { // assign a to every element
-        for (int i = 0; i < size(); i++)
+        for (int i = 0; i < size; i++)
             v[i] = a.v[i];
         return *this;
     }
 
     inline void random(dtype bound) {
         dtype min = -bound, max = bound;
-        for (int i = 0; i < size(); i++) {
+        for (int i = 0; i < size; i++) {
             v[i] =  (dtype(rand()) / RAND_MAX) * (max - min) + min;
         }
     }
@@ -264,9 +265,9 @@ struct Tensor2D {
 
 
     inline void save(std::ofstream &os) const {
-        os << size() << " " << row << " " << col << std::endl;
+        os << size << " " << row << " " << col << std::endl;
         os << v[0];
-        for (int idx = 1; idx < size(); idx++) {
+        for (int idx = 1; idx < size; idx++) {
             os << " " << v[idx];
         }
         os << std::endl;
@@ -278,7 +279,7 @@ struct Tensor2D {
         is >> curRow;
         is >> curCol;
         init(curRow, curCol);
-        for (int idx = 0; idx < size(); idx++) {
+        for (int idx = 0; idx < size; idx++) {
             is >> v[idx];
         }
     }
@@ -360,15 +361,12 @@ inline dtype dexp(const dtype& x, const dtype& y) {
     return y;
 }
 
-<<<<<<< HEAD
-=======
 inline dtype dlog(const dtype& x, const dtype& y) {
     if(x < 0.001) return 1000;
     return 1.0 / x;
 }
 
 
->>>>>>> official
 
 
 #endif

@@ -17,13 +17,8 @@
 // Notice: aux is an auxiliary variable to help parameter updating
 class Param : public BaseParam {
   public:
-#if USE_GPU
-    n3ldg_cuda::Tensor2D aux_square;
-    n3ldg_cuda::Tensor2D aux_mean;
-#else
     Tensor2D aux_square;
     Tensor2D aux_mean;
-#endif
     int iter;
 
     // allow sparse and dense parameters have different parameter initialization methods
@@ -152,7 +147,7 @@ class Param : public BaseParam {
         return sumNorm;
 #else
         dtype sumNorm = 0.0;
-        for (int i = 0; i < grad.size(); i++) {
+        for (int i = 0; i < grad.size; i++) {
             sumNorm += grad.v[i] * grad.v[i];
         }
         return sumNorm;
@@ -169,6 +164,20 @@ class Param : public BaseParam {
 #else
         grad.vec() = grad.vec() * scale;
 #endif
+    }
+
+    inline void save(std::ofstream &os)const {
+        val.save(os);
+        aux_square.save(os);
+        aux_mean.save(os);
+        os << iter << endl;
+    }
+
+    inline void load(std::ifstream &is) {
+        val.load(is);
+        aux_square.load(is);
+        aux_mean.load(is);
+        is >> iter;
     }
 };
 

@@ -10,9 +10,7 @@
 
 #include "BaseParam.h"
 #include "MyLib.h"
-#if USE_GPU
-#include "n3ldg_cuda.h"
-#endif
+
 
 class ModelUpdate {
 
@@ -107,13 +105,7 @@ class ModelUpdate {
                 _params[idx]->rescaleGrad(scale);
             }
         }
-#if USE_GPU
-#if N3LDG_DEBUG
-//        for (BaseParam *param : _params) {
-//            param->grad.verify();
-//        }
-#endif
-#endif
+
         updateAdam();
 #if TEST_CUDA
         for (BaseParam *p : _params) {
@@ -121,7 +113,6 @@ class ModelUpdate {
         }
 #endif
     }
-
 
     inline void rescaleGrad(dtype scale) {
         for (int idx = 0; idx < _params.size(); idx++) {
@@ -157,5 +148,7 @@ class ModelUpdate {
         _params.clear();
     }
 };
+
+
 
 #endif /* ModelUpdate_H_ */
