@@ -70,130 +70,33 @@ public:
     }
 
     void forward(Graph *cg, PNode x1) {
-        ins.clear();
-        ins.push_back(x1);
-
-        degree = 0;
-        for (int i = 0; i < 1; ++i) {
-            ins[i]->addParent(this);
-        }
-        inDims.clear();
-        int curDim = 0;
-        for (int i = 0; i < ins.size(); ++i) {
-            inDims.push_back(ins[i]->val.dim);
-            curDim += inDims[i];
-        }
-        if (curDim != dim) {
-            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
-            abort();
-        }
-
-        cg->addNode(this);
+        std::vector<PNode> ins = {x1};
+        forward(cg, ins);
     }
 
     void forward(Graph *cg, PNode x1, PNode x2) {
-        ins.clear();
-        ins.push_back(x1);
-        ins.push_back(x2);
-
-        degree = 0;
-        for (int i = 0; i < 2; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
+        std::vector<PNode> ins = {x1, x2};
+        forward(cg, ins);
     }
 
     void forward(Graph *cg, PNode x1, PNode x2, PNode x3) {
-        ins.clear();
-        ins.push_back(x1);
-        ins.push_back(x2);
-        ins.push_back(x3);
-
-        degree = 0;
-        for (int i = 0; i < 3; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        inDims.clear();
-        int curDim = 0;
-        for (int i = 0; i < ins.size(); ++i) {
-            inDims.push_back(ins[i]->val.dim);
-            curDim += inDims[i];
-        }
-        if (curDim != dim) {
-            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
-            abort();
-        }
-        cg->addNode(this);
+        std::vector<PNode> ins = {x1, x2, x3};
+        forward(cg, ins);
     }
 
     void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4) {
-        ins.clear();
-        ins.push_back(x1);
-        ins.push_back(x2);
-        ins.push_back(x3);
-        ins.push_back(x4);
-
-        degree = 0;
-        for (int i = 0; i < 4; ++i) {
-            ins[i]->addParent(this);
-        }
-
-        cg->addNode(this);
+        std::vector<PNode> ins = {x1, x2, x3, x4};
+        forward(cg, ins);
     }
 
     void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5) {
-        ins.clear();
-        ins.push_back(x1);
-        ins.push_back(x2);
-        ins.push_back(x3);
-        ins.push_back(x4);
-        ins.push_back(x5);
-
-        degree = 0;
-        for (int i = 0; i < 5; ++i) {
-            ins[i]->addParent(this);
-        }
-        inDims.clear();
-        int curDim = 0;
-        for (int i = 0; i < ins.size(); ++i) {
-            inDims.push_back(ins[i]->val.dim);
-            curDim += inDims[i];
-        }
-        if (curDim != dim) {
-            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
-            abort();
-        }
-
-        cg->addNode(this);
+        std::vector<PNode> ins = {x1, x2, x3, x4, x5};
+        forward(cg, ins);
     }
 
     void forward(Graph *cg, PNode x1, PNode x2, PNode x3, PNode x4, PNode x5, PNode x6) {
-        ins.clear();
-        ins.push_back(x1);
-        ins.push_back(x2);
-        ins.push_back(x3);
-        ins.push_back(x4);
-        ins.push_back(x5);
-        ins.push_back(x6);
-
-        degree = 0;
-        for (int i = 0; i < 6; ++i) {
-            ins[i]->addParent(this);
-        }
-        inDims.clear();
-        int curDim = 0;
-        for (int i = 0; i < ins.size(); ++i) {
-            inDims.push_back(ins[i]->val.dim);
-            curDim += inDims[i];
-        }
-        if (curDim != dim) {
-            std::cout << "input dim size not match" << curDim << "\t" << dim << std::endl;
-            abort();
-        }
-
-        cg->addNode(this);
+        std::vector<PNode> ins = {x1, x2, x3, x4, x5, x6};
+        forward(cg, ins);
     }
 
     PExecute generate(bool bTrain, dtype cur_drop_factor);
@@ -229,7 +132,7 @@ public:
         int nSize = ins.size();
         int offset = 0;
         for (int i = 0; i < nSize; ++i) {
-            for (int idx = 0; idx < inDims[i]; idx++) {
+            for (int idx = 0; idx < inDims.at(i); idx++) {
                 val[offset + idx] = ins[i]->val[idx];
             }
             offset += inDims[i];
@@ -263,7 +166,7 @@ class ConcatExecute : public Execute {
         int count = batch.size();
         drop_mask.init(outDim, count);
         CalculateDropMask(count, outDim, drop_mask);
-        n3ldg_cuda::ConcatForward(graph_info, drop_mask.value,
+        n3ldg_cuda::ConcatForward(graph_info, bTrain, drop_mask.value,
             dynamicDropValue(), count, inCount, outDim);
 #if TEST_CUDA
         if (initialDropValue() > 0) {
