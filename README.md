@@ -12,6 +12,7 @@ You can get EIGEN from http://eigen.tuxfamily.org/index.php?title=Main_Page
 You can get CMake from https://cmake.org/install/
 #### cuda
 You can get cuda from https://developer.nvidia.com/cuda-80-ga2-download-archive
+
 If you have any problem, please send an email to mason.zms@gmail.com
 ## Examples:
 Some examples are realeased at:
