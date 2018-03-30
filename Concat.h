@@ -253,38 +253,32 @@ public:
 #if USE_GPU
 class ConcatExecute : public Execute {
   public:
-    bool bTrain;
     int outDim;
     int inCount;
     Tensor2D drop_mask;
-  public:
+
     void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         profiler.BeginEvent("ConcatNode forward");
         int count = batch.size();
-        assert(drop_factor < 1);
-        if (drop_factor > 0) {
-            drop_mask.init(outDim, count);
-            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
-                    drop_mask.value);
-        }
-        n3ldg_cuda::ConcatForward(graph_info, drop_mask.value, drop_factor,
-            count, inCount, outDim);
+        drop_mask.init(outDim, count);
+        CalculateDropMask(count, outDim, drop_mask);
+        n3ldg_cuda::ConcatForward(graph_info, drop_mask.value,
+            dynamicDropValue(), count, inCount, outDim);
 #if TEST_CUDA
-        if (drop_factor > 0) {
+        if (initialDropValue() > 0) {
             drop_mask.copyFromDeviceToHost();
             for (int i = 0; i < count; ++i) {
                 for (int j = 0; j < outDim; ++j) {
                     dtype v = drop_mask[j][i];
-                    batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+                    batch[i]->drop_mask[j] = v <= dynamicDropValue() ? 0 : 1;
                 }
             }
         }
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            if (drop_factor > 0) {
-                batch[idx]->forward_drop(bTrain, drop_factor /
-                        batch[0]->drop_value);
+            if (initialDropValue() > 0) {
+                batch[idx]->forward_drop(bTrain, drop_factor);
             }
             n3ldg_cuda::Assert(batch[idx]->val.verify("concat forward"));
         }
@@ -304,10 +298,10 @@ class ConcatExecute : public Execute {
         }
 
         n3ldg_cuda::ConcatBackward(this->graph_info, drop_mask.value,
-                drop_factor, count, inCount, outDim);
+                dynamicDropValue(), count, inCount, outDim);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
-            if (drop_factor > 0) {
+            if (initialDropValue() > 0) {
                 batch[idx]->backward_drop();
             }
             batch[idx]->backward();
@@ -323,8 +317,6 @@ class ConcatExecute : public Execute {
 };
 #else
 class ConcatExecute : public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -350,7 +342,7 @@ inline PExecute ConcatNode::generate(bool bTrain, dtype cur_drop_factor) {
     ConcatExecute* exec = new ConcatExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor * drop_value;
+    exec->drop_factor = cur_drop_factor;
 #if USE_GPU
     exec->inCount = this->ins.size();
     exec->outDim = 0;

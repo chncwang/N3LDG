@@ -323,7 +323,6 @@ class UniExecute :public Execute {
     dtype(*activate)(const dtype&);   // activation function
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
     Tensor2D drop_mask;
-    bool bTrain;
 
     inline void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
@@ -356,14 +355,11 @@ class UniExecute :public Execute {
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
                 ty.value, outDim, inDim, count, param->bUseB);
 
-        if (bTrain) {
-            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, outDim,
-                    drop_mask.value);
-        }
+        CalculateDropMask(count, outDim, drop_mask);
 
         n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
         n3ldg_cuda::Activated(activatedEnum, ty.value, ys, y.value, outDim,
-                bTrain, drop_factor, drop_mask.value);
+                bTrain, dynamicDropValue(), drop_mask.value);
 
         for (int i = 0; i<batch.size(); ++i) {
             UniNode *n = static_cast<UniNode*>(batch.at(i));
@@ -402,13 +398,12 @@ class UniExecute :public Execute {
         for (int i = 0; i < count; ++i) {
             for (int j = 0; j < outDim; ++j) {
                 dtype v = drop_mask[j][i];
-                batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+                batch[i]->drop_mask[j] = v <= dynamicDropValue() ? 0 : 1;
             }
         }
 
         for (int i = 0; i < count; ++i) {
-            dtype drop_value = batch[0]->drop_value;
-            batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
+            batch[i]->forward_drop(bTrain, drop_factor);
             n3ldg_cuda::Assert(batch[i]->val.verify("forward batch i val"));
         }
 
@@ -445,7 +440,7 @@ class UniExecute :public Execute {
 
         for (int i = 0; i < count; ++i) {
             dtype drop_value = batch[0]->drop_value;
-            batch[i]->forward_drop(bTrain, drop_factor / batch[0]->drop_value);
+            batch[i]->forward_drop(bTrain, drop_factor);
         }
 #endif
         profiler.EndCudaEvent();
@@ -467,7 +462,7 @@ class UniExecute :public Execute {
         }
         n3ldg_cuda::ActivatedEnum activatedEnum = ToActivatedEnum(activate);
         n3ldg_cuda::CalculateLtyForUniBackward(activatedEnum, ly_vec, ty.value,
-                y.value, drop_mask.value, drop_factor, lty.value, count,
+                y.value, drop_mask.value, dynamicDropValue(), lty.value, count,
                 outDim);
 #if TEST_CUDA
         n3ldg_cuda::Assert(param->W.grad.verify(
@@ -580,13 +575,10 @@ inline PExecute UniNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->param = param;
     exec->activate = activate;
     exec->derivate = derivate;
-    exec->drop_factor = cur_drop_factor * drop_value;
     return exec;
 };
 
 class LinearUniExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -621,7 +613,6 @@ public:
     Tensor2D x, y, b;
     int inDim, outDim, count;
     UniParams* param;
-    bool bTrain;
 
     void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
@@ -751,9 +742,7 @@ class LinearExecute :public Execute {
     Tensor2D x, y;
     int inDim, outDim, count;
     UniParams* param;
-    bool bTrain;
 
-  public:
     inline void  forward() {
         count = batch.size();
         x.init(inDim, count);

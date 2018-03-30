@@ -92,8 +92,6 @@ class BucketNode : public Node {
 #if USE_GPU
 class BucketExecute : public Execute {
   public:
-    bool bTrain;
-  public:
     void  forward() override {}
 
     void backward() override {}
@@ -101,8 +99,6 @@ class BucketExecute : public Execute {
 
 #else
 class BucketExecute : public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();

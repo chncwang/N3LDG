@@ -489,8 +489,6 @@ PExecute MinPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
 
 class PoolExecute : public Execute {
   public:
-    bool bTrain;
-  public:
     virtual void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
@@ -775,7 +773,6 @@ class SumPoolNode : public Node {
 #if USE_GPU
 class SumPoolExecute : public Execute {
 public:
-    bool bTrain;
     int dim;
     std::vector<int> in_counts;
     int max_in_count;
@@ -857,8 +854,6 @@ public:
 };
 #else
 class SumPoolExecute : public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -1149,7 +1144,6 @@ class AvgPoolNode : public Node {
 #if USE_GPU
 class AvgPoolExecute : public Execute {
 public:
-    bool bTrain;
     int dim;
     std::vector<int> in_counts;
     int max_in_count;
@@ -1232,8 +1226,6 @@ public:
 #else
 class AvgPoolExecute : public Execute {
   public:
-    bool bTrain;
-  public:
     inline void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
@@ -1259,7 +1251,9 @@ inline PExecute AvgPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+#if USE_GPU
     exec->dim = dim;
+#endif
     return exec;
 }
 

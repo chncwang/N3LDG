@@ -276,7 +276,6 @@ class PAddNode : public Node {
 
 class PAddExecute : public Execute {
 public:
-    bool bTrain;
     int in_count;
     int dim;
     Tensor2D drop_mask;
@@ -286,8 +285,7 @@ public:
         int count = batch.size();
 
         drop_mask.init(dim, count);
-        n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
-                drop_mask.value);
+        CalculateDropMask(count, dim, drop_mask);
 
         std::vector<std::vector<dtype*>> in_vals;
         in_vals.reserve(in_count);

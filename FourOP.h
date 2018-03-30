@@ -279,7 +279,6 @@ public:
     FourParams* param;
     dtype(*activate)(const dtype&);   // activation function
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
-    bool bTrain;
 public:
 
     void  forward() {
@@ -398,7 +397,6 @@ public:
     Tensor2D x1, x2, x3, x4, y, b;
     int inDim1, inDim2, inDim3, inDim4, outDim, count;
     FourParams* param;
-    bool bTrain;
 
 public:
     inline void  forward() {

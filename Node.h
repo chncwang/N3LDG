@@ -245,7 +245,7 @@ class Node {
         }
         random_shuffle(tmp_masks.begin(), tmp_masks.end());
         for (int idx = 0; idx < dim; idx++) {
-            drop_mask[idx] = 1.0 * tmp_masks[idx];
+            drop_mask[idx] = tmp_masks[idx];
         }
     }
 
@@ -255,10 +255,10 @@ class Node {
 #if !TEST_CUDA
                 generate_dropmask(drop_factor);
 #endif
-                val.vec() = val.vec() * drop_mask.vec();
             } else {
-                val.vec() = val.vec() * (1 - drop_value * drop_factor);
+                drop_mask = 1 - drop_value * drop_factor;
             }
+            val.vec() = val.vec() * drop_mask.vec();
         }
         degree = -1;
     }
@@ -329,6 +329,7 @@ void clearNodes(std::vector<Node*> &nodes, int dim) {
 
 class Execute {
 public:
+    bool bTrain;
     vector<PNode> batch;
     dtype drop_factor;
 #if USE_GPU
@@ -337,7 +338,6 @@ public:
 
     virtual ~Execute() = default;
 
-  public:
     virtual void forward() = 0;
     virtual void backward() = 0;
     virtual void clearValue() {
@@ -362,6 +362,24 @@ public:
 
         return false;
     }
+
+    dtype dynamicDropValue() const {
+        return drop_factor * batch.at(0)->drop_value;
+    }
+
+    dtype initialDropValue() const {
+        return batch.at(0)->drop_value;
+    }
+
+#if USE_GPU
+    void CalculateDropMask(int count, int dim,
+            const Tensor2D &mask) {
+        if (bTrain && initialDropValue() > 0) {
+            n3ldg_cuda::CalculateDropoutMask(dynamicDropValue(), count, dim,
+                    mask.value);
+        }
+    }
+#endif
 };
 
 typedef  Execute* PExecute;

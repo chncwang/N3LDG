@@ -161,7 +161,6 @@ public:
 #if USE_GPU
 class AttentionSoftMaxExecute : public Execute {
 public:
-    bool bTrain;
     int dim;
     std::vector<int> in_counts;
     int max_in_count;
@@ -266,8 +265,6 @@ public:
 };
 #else
 class AttentionSoftMaxExecute : public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -442,7 +439,6 @@ class AttentionSoftMaxVNode : public Node {
 #if USE_GPU
 class AttentionSoftMaxVExecute : public Execute {
 public:
-    bool bTrain;
     int dim;
     std::vector<int> in_counts;
     int max_in_count;
@@ -555,8 +551,6 @@ public:
 };
 #else
 class AttentionSoftMaxVExecute : public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();

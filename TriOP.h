@@ -258,7 +258,6 @@ public:
     TriParams* param;
     dtype(*activate)(const dtype&);   // activation function
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
-    bool bTrain;
 
 public:
     ~TriExecute() {
@@ -369,7 +368,6 @@ public:
     Tensor2D x1, x2, x3, y, b;
     int inDim1, inDim2, inDim3, outDim, count;
     TriParams* param;
-    bool bTrain;
 
 public:
     inline void  forward() {
@@ -493,7 +491,6 @@ inline PExecute LinearTriNode::generate(bool bTrain, dtype drop_factor) {
 #elif USE_BASE
 class TriExecute :public Execute {
 public:
-    bool bTrain;
     int dim;
     vector<Tensor1D> tys, ltys;
 public:
@@ -537,8 +534,6 @@ inline PExecute TriNode::generate(bool bTrain, dtype drop_factor) {
 
 class LinearTriExecute :public Execute {
 public:
-    bool bTrain;
-public:
     inline void  forward() {
         int count = batch.size();
         //#pragma omp parallel for schedule(static,1)
@@ -575,7 +570,6 @@ public:
     TriParams* param;
     dtype(*activate)(const dtype&);   // activation function
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
-    bool bTrain;
 
 public:
     ~TriExecute() {
@@ -686,7 +680,6 @@ public:
     Tensor2D x1, x2, x3, y, b;
     int inDim1, inDim2, inDim3, outDim, count;
     TriParams* param;
-    bool bTrain;
 
 public:
     inline void  forward() {
@@ -795,7 +788,7 @@ inline PExecute TriNode::generate(bool bTrain, dtype drop_factor) {
 }
 
 
-inline PExecute LinearTriNode::generate(bool bTrain) {
+inline PExecute LinearTriNode::generate(bool bTrain, dtype drop_factor) {
     LinearTriExecute* exec = new LinearTriExecute();
     exec->batch.push_back(this);
     exec->inDim1 = param->W1.inDim();
@@ -804,6 +797,7 @@ inline PExecute LinearTriNode::generate(bool bTrain) {
     exec->outDim = param->W1.outDim();
     exec->param = param;
     exec->bTrain = bTrain;
+    exec->drop_factor = drop_factor;
     return exec;
 }
 #endif

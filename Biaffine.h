@@ -227,8 +227,6 @@ class BiaffineNode : public Node {
 
 class BiaffineExecute :public Execute {
   public:
-    bool bTrain;
-  public:
     inline void  forward() {
         int count = batch.size();
 

@@ -84,8 +84,6 @@ class ActivateNode :public Node {
 
 class ActivateExecute :public Execute {
   public:
-    bool bTrain;
-  public:
     inline void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
@@ -161,7 +159,6 @@ class TanhNode :public Node {
 
 class TanhExecute :public Execute {
   public:
-    bool bTrain;
     Tensor2D drop_mask;
     int dim;
 
@@ -181,25 +178,20 @@ class TanhExecute :public Execute {
             ys.push_back(tanh->val.value);
         }
 
-        if (bTrain) {
-            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
-                    drop_mask.value);
-        }
-
-        n3ldg_cuda::TanhForward(xs, count, dim, drop_mask.value, drop_factor,
-                ys);
+        CalculateDropMask(count, dim, drop_mask);
+        n3ldg_cuda::TanhForward(xs, count, dim, drop_mask.value,
+                this->dynamicDropValue(), ys);
 #if TEST_CUDA
         drop_mask.copyFromDeviceToHost();
         for (int i = 0; i < count; ++i) {
             for (int j = 0; j < dim; ++j) {
                 dtype v = drop_mask[j][i];
-                batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+                batch[i]->drop_mask[j] = v <= dynamicDropValue() ? 0 : 1;
             }
         }
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            batch[idx]->forward_drop(bTrain,
-                    drop_factor / batch.at(0)->drop_value);
+            batch[idx]->forward_drop(bTrain, drop_factor);
             n3ldg_cuda::Assert(batch.at(idx)->val.verify("Tanh forward"));
         }
 #endif
@@ -233,7 +225,7 @@ class TanhExecute :public Execute {
             in_losses.push_back(tanh->in->loss.value);
         }
         n3ldg_cuda::TanhBackward(losses, vals, count, dim, drop_mask.value,
-                drop_factor, in_losses);
+                dynamicDropValue(), in_losses);
 #if TEST_CUDA
         for (Node *n : batch) {
             n->backward_drop();
@@ -261,7 +253,7 @@ inline PExecute TanhNode::generate(bool bTrain, dtype cur_drop_factor) {
     TanhExecute* exec = new TanhExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor * drop_value;
+    exec->drop_factor = cur_drop_factor;
     exec->dim = dim;
     return exec;
 };
@@ -314,8 +306,6 @@ class SigmoidNode :public Node {
 };
 
 class SigmoidExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -393,8 +383,6 @@ class ReluNode :public Node {
 };
 
 class ReluExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -483,8 +471,6 @@ class IndexNode :public Node {
 
 class IndexExecute : public Execute {
   public:
-    bool bTrain;
-  public:
     inline void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
@@ -562,8 +548,6 @@ class PSubNode : public Node {
 
 
 class PSubExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -651,8 +635,6 @@ class PDotNode : public Node {
 };
 
 class PDotExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();

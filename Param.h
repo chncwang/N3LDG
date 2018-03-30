@@ -70,12 +70,12 @@ class Param : public BaseParam {
         if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
         aux_square.vec() = aux_square.vec() + grad.vec().square();
         val.vec() = val.vec() - grad.vec() * alpha / (aux_square.vec() + eps).sqrt();
+        n3ldg_cuda::Assert(val.verify("Param adagrad"));
 #endif
 #else
         if (val.col > 1 && val.row > 1)grad.vec() = grad.vec() + val.vec() * reg;
         aux_square.vec() = aux_square.vec() + grad.vec().square();
         val.vec() = val.vec() - grad.vec() * alpha / (aux_square.vec() + eps).sqrt();
-        n3ldg_cuda::Assert(val.verify("Param adagrad"));
 #endif
     }
 

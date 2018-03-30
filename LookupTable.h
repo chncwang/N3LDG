@@ -288,8 +288,6 @@ public:
 #if USE_GPU
 class LookupExecute :public Execute {
 public:
-    bool bTrain;
-    dtype drop_factor;
     int dim;
     Tensor2D drop_mask;
     LookupTable *table;
@@ -299,11 +297,8 @@ public:
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         profiler.BeginEvent("LookupNode forward");
         int count = batch.size();
-        if (bTrain && drop_factor > 0) {
-            drop_mask.init(dim, count);
-            n3ldg_cuda::CalculateDropoutMask(drop_factor, count, dim,
-                    drop_mask.value);
-        }
+        drop_mask.init(dim, count);
+        CalculateDropMask(count, dim, drop_mask);
         xids.reserve(count);
         std::vector<dtype*> vals;
         vals.reserve(count);
@@ -313,22 +308,22 @@ public:
             vals.push_back(n->val.value);
         }
 
-        n3ldg_cuda::LookupForward(xids, table->E.val.value, drop_mask.value,
-                drop_factor, count, dim, vals);
+        n3ldg_cuda::LookupForward(xids, table->E.val.value, bTrain,
+                drop_mask.value, dynamicDropValue(), count, dim, vals);
 #if TEST_CUDA
         drop_mask.copyFromDeviceToHost();
         for (int idx = 0; idx < count; idx++) {
             batch[idx]->compute();
-            if (drop_factor > 0) {
+            if (batch.at(0) > 0) {
                 for (int i = 0; i < count; ++i) {
                     for (int j = 0; j < dim; ++j) {
                         dtype v = drop_mask[j][i];
-                        batch[i]->drop_mask[j] = v <= drop_factor ? 0 : 1;
+                        batch[i]->drop_mask[j] = v <= dynamicDropValue() ?
+                            0 : 1;
                     }
                 }
             }
-            batch[idx]->forward_drop(bTrain, drop_factor /
-                    batch[0]->drop_value);
+            batch[idx]->forward_drop(bTrain, drop_factor);
             int xid = static_cast<LookupNode*>(batch[idx])->xid;
             n3ldg_cuda::Assert(batch[idx]->val.verify("lookup forward"));
         }
@@ -346,7 +341,7 @@ public:
         n3ldg_cuda::LookupBackward(xids, table->nUNKId, table->bFineTune,
                 losses,
                 drop_mask.value,
-                drop_factor,
+                dynamicDropValue(),
                 count,
                 dim,
                 table->E.grad.value,
@@ -368,15 +363,12 @@ public:
 #else
 class LookupExecute :public Execute {
     public:
-        bool bTrain;
-    public:
         inline void  forward() {
             int count = batch.size();
             //#pragma omp parallel for
             for (int idx = 0; idx < count; idx++) {
                 batch[idx]->compute();
-                batch[idx]->forward_drop(bTrain, drop_factor /
-                        batch[0]->drop_value);
+                batch[idx]->forward_drop(bTrain, drop_factor);
             }
         }
 
@@ -396,7 +388,7 @@ PExecute LookupNode::generate(bool bTrain, dtype cur_drop_factor) {
     LookupExecute* exec = new LookupExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
-    exec->drop_factor = cur_drop_factor * drop_value;
+    exec->drop_factor = cur_drop_factor;
 #if USE_GPU
     exec->table = param;
     exec->dim = dim;
