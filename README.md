@@ -20,8 +20,9 @@ Some examples are realeased at:
 * https://github.com/yunan4nlp/N3LDGSemiCRFSegmentation-SegDemo
 for cuda usage, see:
 * https://github.com/chncwang/news-title-classification
+
 for cuda usage, see:
 
-https://github.com/chncwang/news-title-classification
+* https://github.com/chncwang/news-title-classification
 ## Authors:
 Zhang Meishan, Li Zhenghua, Wang Qiansheng, Yu Nan
