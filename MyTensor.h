@@ -1,4 +1,5 @@
 #ifndef BasicTensor
+
 #define BasicTensor
 
 
@@ -65,10 +66,12 @@ struct Tensor1D {
     }
 
     inline dtype& operator[](const int i) {
+        assert(i < dim);
         return v[i];  // no boundary check?
     }
 
     inline const dtype& operator[](const int i) const {
+        assert(i < dim);
         return v[i];  // no boundary check?
     }
 
@@ -186,10 +189,12 @@ struct Tensor2D {
 
     //use it carefully, first col, then row, because rows are allocated successively
     inline dtype* operator[](const int irow) {
+        assert(irow < row);
         return &(v[irow*col]);  // no boundary check?
     }
 
     inline const dtype* operator[](const int irow) const {
+        assert(irow < row);
         return &(v[irow*col]);  // no boundary check?
     }
 
@@ -281,7 +286,6 @@ struct Tensor2D {
 };
 }
 
-
 //useful functions
 inline dtype fequal(const dtype& x) {
     return x;
@@ -311,6 +315,8 @@ inline dtype fselu(const dtype& x) {
     if (x <= 0) return lambda * alpha * (exp(x) - 1);
     return lambda * x;
 }
+
+
 
 inline dtype fexp(const dtype& x) {
     return exp(x);
@@ -363,5 +369,6 @@ inline dtype dlog(const dtype& x, const dtype& y) {
 
 
 >>>>>>> official
+
 
 #endif

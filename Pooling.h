@@ -12,7 +12,10 @@
 #include "MyLib.h"
 #include "Node.h"
 #include "Graph.h"
-
+#if USE_GPU
+#include "n3ldg_cuda.h"
+#endif
+#include "profiler.h"
 
 class PoolNode : public Node {
   public:
@@ -87,7 +90,8 @@ class PoolNode : public Node {
         int nSize = ins.size();
         setMask();
         for(int i = 0; i < dim; i++) {
-            val[i] = ins[masks[i]]->val[i];
+            int mask_i = masks.at(i);
+            val[i] = ins.at(mask_i)->val[i];
         }
     }
 
@@ -99,14 +103,95 @@ class PoolNode : public Node {
 
 };
 
+#if USE_GPU
+class MaxPoolNode : public
+#if TEST_CUDA
+                    PoolNode
+#else
+                    Node
+#endif
+{
+public:
+#if !TEST_CUDA
+    vector<PNode> ins;
+#endif
+    MaxPoolNode() {
+        node_type = "max-pooling";
+    }
+
+#if TEST_CUDA
+    void setMask() {
+        int nSize = ins.size();
+        int thread_count = 8;
+        while (thread_count < nSize) {
+            thread_count <<= 1;
+        }
+
+        for (int dim_i = 0; dim_i < dim; ++dim_i) {
+            dtype shared_arr[1024];
+            dtype shared_indexers[1024];
+            for (int i = 0; i < 1024; ++i) {
+                shared_arr[i] = i < nSize ? ins[i]->val[dim_i] : -INFINITY;
+                shared_indexers[i] = i;
+            }
+            for (int i = (thread_count >> 1); i > 0; i >>= 1) {
+                for (int j = 0; j < i; ++j) {
+                    int plus_i = j + i;
+                    if (shared_arr[j] < shared_arr[plus_i]) {
+                        shared_arr[j] = shared_arr[plus_i];
+                        shared_indexers[j] = shared_indexers[plus_i];
+                    }
+                }
+
+                masks[dim_i] = shared_indexers[0];
+            }
+        }
+    }
+#else
+    void compute() {
+        abort();
+    }
+
+    void backward() {
+        abort();
+    }
+#endif
+
+    void forward(Graph *cg, const vector<PNode>& x) {
+        assert(!x.empty());
+        int nSize = x.size();
+        ins.clear();
+        for (int i = 0; i < nSize; i++) {
+            assert(x[i]->val.dim == dim);
+            ins.push_back(x[i]);
+        }
+
+        degree = 0;
+        for (int i = 0; i < nSize; i++) {
+            ins[i]->addParent(this);
+        }
+
+        cg->addNode(this);
+    }
+
+    void toNodeInfo(NodeInfo &info) const override {
+        Node::toNodeInfo(info);
+        info.input_count = ins.size();
+        for (PNode p : ins) {
+            info.input_vals.push_back(p->val.value);
+            info.input_losses.push_back(p->loss.value);
+        }
+    }
+
+    PExecute generate(bool bTrain, dtype cur_drop_factor) override;
+};
+#else
 class MaxPoolNode : public PoolNode {
   public:
     MaxPoolNode() : PoolNode() {
         node_type = "max-pooling";
     }
 
-    //Be careful that the row is the dim of input vector, and the col is the number of input vectors
-    //Another point is that we change the input vectors directly.
     void setMask() {
         int nSize = ins.size();
 
@@ -122,12 +207,91 @@ class MaxPoolNode : public PoolNode {
     }
 
 };
+#endif
 
+#if USE_GPU
+class MinPoolNode : public
+#if TEST_CUDA
+                    PoolNode
+#else
+                    Node
+#endif
+{
+public:
+#if !TEST_CUDA
+    vector<PNode> ins;
+#endif
+    MinPoolNode() {
+        node_type = "max-pooling";
+    }
 
-<<<<<<< HEAD
-class PoolExecute : public Execute {
-=======
+#if TEST_CUDA
+    void setMask() {
+        int nSize = ins.size();
+        int thread_count = 8;
+        while (thread_count < nSize) {
+            thread_count <<= 1;
+        }
 
+        for (int dim_i = 0; dim_i < dim; ++dim_i) {
+            dtype shared_arr[1024];
+            dtype shared_indexers[1024];
+            for (int i = 0; i < 1024; ++i) {
+                shared_arr[i] = i < nSize ? ins[i]->val[dim_i] : INFINITY;
+                shared_indexers[i] = i;
+            }
+            for (int i = (thread_count >> 1); i > 0; i >>= 1) {
+                for (int j = 0; j < i; ++j) {
+                    int plus_i = j + i;
+                    if (shared_arr[j] > shared_arr[plus_i]) {
+                        shared_arr[j] = shared_arr[plus_i];
+                        shared_indexers[j] = shared_indexers[plus_i];
+                    }
+                }
+
+                masks[dim_i] = shared_indexers[0];
+            }
+        }
+    }
+#else
+    void compute() {
+        abort();
+    }
+
+    void backward() {
+        abort();
+    }
+#endif
+
+    void forward(Graph *cg, const vector<PNode>& x) {
+        assert(!x.empty());
+        int nSize = x.size();
+        ins.clear();
+        for (int i = 0; i < nSize; i++) {
+            assert(x[i]->val.dim == dim);
+            ins.push_back(x[i]);
+        }
+
+        degree = 0;
+        for (int i = 0; i < nSize; i++) {
+            ins[i]->addParent(this);
+        }
+
+        cg->addNode(this);
+    }
+
+    void toNodeInfo(NodeInfo &info) const override {
+        Node::toNodeInfo(info);
+        info.input_count = ins.size();
+        for (PNode p : ins) {
+            info.input_vals.push_back(p->val.value);
+            info.input_losses.push_back(p->loss.value);
+        }
+    }
+
+    PExecute generate(bool bTrain, dtype cur_drop_factor) override;
+};
+#else
 class MinPoolNode : public PoolNode {
   public:
     MinPoolNode() : PoolNode() {
@@ -149,16 +313,182 @@ class MinPoolNode : public PoolNode {
             masks[idx] = minIndex;
         }
     }
+};
+#endif
 
+#if USE_GPU
+class MaxPoolExecute : public Execute
+{
+public:
+    int dim;
+    n3ldg_cuda::IntArray hit_inputs;
+    std::vector<int> in_counts;
+
+    void forward() override {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("MaxPoolNode forward");
+        int count = batch.size();
+        hit_inputs.init(count * dim);
+        in_counts.reserve(count);
+        for (Node *n : batch) {
+            MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
+            in_counts.push_back(m->ins.size());
+#if TEST_CUDA
+            for (Node *nn : m->ins) {
+                n3ldg_cuda::Assert(nn->val.verify(
+                            "max pooling forward input"));
+            }
+#endif
+        }
+        n3ldg_cuda::PoolForward(n3ldg_cuda::PoolingEnum::MAX, graph_info,
+                count, in_counts, dim, hit_inputs.value);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+            n3ldg_cuda::Assert(batch[idx]->val.verify("max pooling forward"));
+            MaxPoolNode *n = static_cast<MaxPoolNode*>(batch[idx]);
+            if (!n3ldg_cuda::Verify(n->masks.data(),
+                        hit_inputs.value + idx * dim, dim,
+                        "max pooling forward mask")) {
+                for (int i = 0; i < 2; ++i) {
+                    std::cout << "i:" << i << std::endl;
+                    Node *p = n->ins.at(i);
+                    std::cout << n->ins.at(i)->val[37] << std::endl;
+                }
+                abort();
+            }
+        }
+#endif
+        profiler.EndCudaEvent();
+    }
+
+    void backward() override {
+        int count = batch.size();
+        for (Node *n : batch) {
+            MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
+            n3ldg_cuda::Assert(m->loss.verify("max pooling backward loss"));
+#if TEST_CUDA
+            int in_i = 0;
+            for (Node *in : m->ins) {
+                n3ldg_cuda::Assert(in->loss.verify(
+                            "max pooling backward in loss initial"));
+            }
+#endif
+        }
+        n3ldg_cuda::PoolBackward(graph_info, in_counts, hit_inputs.value,
+                count, dim);
+
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward();
+        }
+
+        for (int idx = 0; idx < count; idx++) {
+            int in_i = 0;
+            for (Node *n : static_cast<MaxPoolNode*>(batch[idx])->ins) {
+                n3ldg_cuda::Assert(n->loss.verify("max pooling backward"));
+            }
+        }
+#endif
+    }
 };
 
+PExecute MaxPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
+    MaxPoolExecute *exec = new MaxPoolExecute;
+    exec->batch.push_back(this);
+    exec->dim = dim;
+    return exec;
+}
+#endif
 
+#if USE_GPU
+class MinPoolExecute : public Execute
+{
+public:
+    int dim;
+    n3ldg_cuda::IntArray hit_inputs;
+    std::vector<int> in_counts;
+
+    void forward() override {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("MinPoolNode forward");
+        int count = batch.size();
+        hit_inputs.init(count * dim);
+        in_counts.reserve(count);
+        for (Node *n : batch) {
+            MinPoolNode *m = static_cast<MinPoolNode*>(n);
+            in_counts.push_back(m->ins.size());
+#if TEST_CUDA
+            for (Node *nn : m->ins) {
+                n3ldg_cuda::Assert(nn->val.verify(
+                            "min pooling forward input"));
+            }
+#endif
+        }
+        n3ldg_cuda::PoolForward(n3ldg_cuda::PoolingEnum::MIN, graph_info,
+                count, in_counts, dim, hit_inputs.value);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+            n3ldg_cuda::Assert(batch[idx]->val.verify("min pooling forward"));
+            MinPoolNode *n = static_cast<MinPoolNode*>(batch[idx]);
+            if (!n3ldg_cuda::Verify(n->masks.data(),
+                        hit_inputs.value + idx * dim, dim,
+                        "mix pooling forward mask")) {
+                for (int i = 0; i < 2; ++i) {
+                    std::cout << "i:" << i << std::endl;
+                    Node *p = n->ins.at(i);
+                    std::cout << n->ins.at(i)->val[37] << std::endl;
+                }
+                abort();
+            }
+        }
+#endif
+        profiler.EndCudaEvent();
+    }
+
+    void backward() override {
+        int count = batch.size();
+        for (Node *n : batch) {
+            MinPoolNode *m = static_cast<MinPoolNode*>(n);
+            n3ldg_cuda::Assert(m->loss.verify("min pooling backward loss"));
+#if TEST_CUDA
+            int in_i = 0;
+            for (Node *in : m->ins) {
+                n3ldg_cuda::Assert(in->loss.verify(
+                            "min pooling backward in loss initial"));
+            }
+#endif
+        }
+        n3ldg_cuda::PoolBackward(graph_info, in_counts, hit_inputs.value,
+                count, dim);
+
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->backward();
+        }
+
+        for (int idx = 0; idx < count; idx++) {
+            int in_i = 0;
+            for (Node *n : static_cast<MinPoolNode*>(batch[idx])->ins) {
+                n3ldg_cuda::Assert(n->loss.verify("min pooling backward"));
+            }
+        }
+#endif
+    }
+};
+
+PExecute MinPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
+    MinPoolExecute *exec = new MinPoolExecute;
+    exec->batch.push_back(this);
+    exec->dim = dim;
+    return exec;
+}
+#endif
 
 class PoolExecute : public Execute {
   public:
-    bool bTrain;
-  public:
-    inline void  forward() {
+    virtual void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
@@ -167,7 +497,7 @@ class PoolExecute : public Execute {
         }
     }
 
-    inline void backward() {
+    virtual void backward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
@@ -439,10 +769,90 @@ class SumPoolNode : public Node {
 
 };
 
-
+#if USE_GPU
 class SumPoolExecute : public Execute {
-  public:
-    bool bTrain;
+public:
+    int dim;
+    std::vector<int> in_counts;
+    int max_in_count;
+    std::vector<dtype*> in_vals;
+
+    void  forward() {
+        int count = batch.size();
+        in_counts.reserve(count);
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            in_counts.push_back(sum->ins.size());
+        }
+
+        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
+
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            in_counts.push_back(sum->ins.size());
+        }
+
+        std::vector<dtype*> vals;
+        in_vals.reserve(count * max_in_count);
+        vals.reserve(count);
+
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            vals.push_back(sum->val.value);
+            for (int i = 0; i < sum->ins.size(); ++i) {
+                in_vals.push_back(sum->ins.at(i)->val.value);
+            }
+            for (int i = 0; i < max_in_count - sum->ins.size(); ++i) {
+                in_vals.push_back(NULL);
+            }
+        }
+
+        n3ldg_cuda::SumPoolForward(n3ldg_cuda::PoolingEnum::SUM, in_vals,
+                count, dim, in_counts, vals);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+        }
+
+        for (Node *n : batch) {
+            n3ldg_cuda::Assert(n->val.verify("sum pool forward"));
+        }
+#endif
+    }
+
+    void backward() {
+        int count = batch.size();
+        std::vector<dtype*> losses;
+        losses.reserve(count);
+        std::vector<dtype*> in_losses;
+        in_losses.reserve(max_in_count * count);
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            losses.push_back(n->loss.value);
+            for (Node *in : sum->ins) {
+                in_losses.push_back(in->loss.value);
+            }
+            for (int i = 0; i < max_in_count - sum->ins.size(); ++i) {
+                in_losses.push_back(NULL);
+            }
+        }
+        n3ldg_cuda::SumPoolBackward(n3ldg_cuda::PoolingEnum::SUM, losses,
+                in_counts, count, dim, in_losses);
+#if TEST_CUDA
+        for (Node *n : batch) {
+            n->backward();
+        }
+        for (Node *n : batch) {
+            SumPoolNode *sum = static_cast<SumPoolNode*>(n);
+            for (Node *in : sum->ins) {
+                n3ldg_cuda::Assert(in->loss.verify("SumPoolExecute backward"));
+            }
+        }
+#endif
+    }
+};
+#else
+class SumPoolExecute : public Execute {
   public:
     inline void  forward() {
         int count = batch.size();
@@ -462,13 +872,16 @@ class SumPoolExecute : public Execute {
         }
     }
 };
+#endif
 
-
-inline PExecute SumPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
+PExecute SumPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
     SumPoolExecute* exec = new SumPoolExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+#if USE_GPU
+    exec->dim = dim;
+#endif
     return exec;
 }
 
@@ -727,11 +1140,91 @@ class AvgPoolNode : public Node {
 
 };
 
+#if USE_GPU
+class AvgPoolExecute : public Execute {
+public:
+    int dim;
+    std::vector<int> in_counts;
+    int max_in_count;
+    std::vector<dtype*> in_vals;
 
+    void  forward() {
+        int count = batch.size();
+        in_counts.reserve(count);
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            in_counts.push_back(sum->ins.size());
+        }
+
+        max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
+
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            in_counts.push_back(sum->ins.size());
+        }
+
+        std::vector<dtype*> vals;
+        in_vals.reserve(count * max_in_count);
+        vals.reserve(count);
+
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            vals.push_back(sum->val.value);
+            for (int i = 0; i < sum->ins.size(); ++i) {
+                in_vals.push_back(sum->ins.at(i)->val.value);
+            }
+            for (int i = 0; i < max_in_count - sum->ins.size(); ++i) {
+                in_vals.push_back(NULL);
+            }
+        }
+
+        n3ldg_cuda::SumPoolForward(n3ldg_cuda::PoolingEnum::AVG, in_vals,
+                count, dim, in_counts, vals);
+#if TEST_CUDA
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+        }
+
+        for (Node *n : batch) {
+            n3ldg_cuda::Assert(n->val.verify("avg pool forward"));
+        }
+#endif
+    }
+
+    void backward() {
+        int count = batch.size();
+        std::vector<dtype*> losses;
+        losses.reserve(count);
+        std::vector<dtype*> in_losses;
+        in_losses.reserve(max_in_count * count);
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            losses.push_back(n->loss.value);
+            for (Node *in : sum->ins) {
+                in_losses.push_back(in->loss.value);
+            }
+            for (int i = 0; i < max_in_count - sum->ins.size(); ++i) {
+                in_losses.push_back(NULL);
+            }
+        }
+        n3ldg_cuda::SumPoolBackward(n3ldg_cuda::PoolingEnum::AVG, losses,
+                in_counts, count, dim, in_losses);
+#if TEST_CUDA
+        for (Node *n : batch) {
+            n->backward();
+        }
+        for (Node *n : batch) {
+            AvgPoolNode *sum = static_cast<AvgPoolNode*>(n);
+            for (Node *in : sum->ins) {
+                n3ldg_cuda::Assert(in->loss.verify("AvgPoolExecute backward"));
+            }
+        }
+#endif
+    }
+};
+#else
 class AvgPoolExecute : public Execute {
 >>>>>>> official
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -751,13 +1244,16 @@ class AvgPoolExecute : public Execute {
         }
     }
 };
-
+#endif
 
 inline PExecute AvgPoolNode::generate(bool bTrain, dtype cur_drop_factor) {
     AvgPoolExecute* exec = new AvgPoolExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+#if USE_GPU
+    exec->dim = dim;
+#endif
     return exec;
 }
 

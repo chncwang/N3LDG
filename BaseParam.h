@@ -8,6 +8,10 @@
 #ifndef BasePARAM_H_
 #define BasePARAM_H_
 
+#if USE_GPU
+#include "n3ldg_cuda.h"
+#endif
+
 #include "MyTensor.h"
 
 #if USE_GPU
@@ -34,6 +38,18 @@ struct BaseParam {
     virtual inline void randpoint(int& idx, int &idy) = 0;
     virtual inline dtype squareGradNorm() = 0;
     virtual inline void rescaleGrad(dtype scale) = 0;
+    virtual inline void save(std::ofstream &os)const = 0;
+    virtual inline void load(std::ifstream &is) = 0;
+#if USE_GPU
+    virtual void copyFromHostToDevice() {
+        val.copyFromHostToDevice();
+        grad.copyFromHostToDevice();
+    }
+    virtual void copyFromDeviceToHost() {
+        val.copyFromDeviceToHost();
+        grad.copyFromDeviceToHost();
+    }
+#endif
 };
 
 #endif /* BasePARAM_H_ */

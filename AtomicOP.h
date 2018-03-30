@@ -129,8 +129,6 @@ class ActivateExecute :public Execute {
 
 class ActivateExecute :public Execute {
   public:
-    bool bTrain;
-  public:
     inline void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
@@ -220,7 +218,7 @@ class TanhNode :public Node {
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
     // better to rewrite for deep understanding
-    inline bool typeEqual(PNode other) {
+    bool typeEqual(PNode other) {
         bool result = Node::typeEqual(other);
         return result;
     }
@@ -228,9 +226,45 @@ class TanhNode :public Node {
 
 class TanhExecute :public Execute {
   public:
-    bool bTrain;
-  public:
-    inline void  forward() {
+    Tensor2D drop_mask;
+    int dim;
+
+#if USE_GPU
+    void forward() {
+        int count = batch.size();
+        std::vector<dtype*> xs, ys;
+        xs.reserve(count);
+        ys.reserve(count);
+        drop_mask.init(dim, count);
+        for (Node *n : batch) {
+            TanhNode *tanh = static_cast<TanhNode*>(n);
+#if TEST_CUDA
+            tanh->in->val.copyFromHostToDevice();
+#endif
+            xs.push_back(tanh->in->val.value);
+            ys.push_back(tanh->val.value);
+        }
+
+        CalculateDropMask(count, dim, drop_mask);
+        n3ldg_cuda::TanhForward(xs, count, dim, drop_mask.value,
+                this->dynamicDropValue(), ys);
+#if TEST_CUDA
+        drop_mask.copyFromDeviceToHost();
+        for (int i = 0; i < count; ++i) {
+            for (int j = 0; j < dim; ++j) {
+                dtype v = drop_mask[j][i];
+                batch[i]->drop_mask[j] = v <= dynamicDropValue() ? 0 : 1;
+            }
+        }
+        for (int idx = 0; idx < count; idx++) {
+            batch[idx]->compute();
+            batch[idx]->forward_drop(bTrain, drop_factor);
+            n3ldg_cuda::Assert(batch.at(idx)->val.verify("Tanh forward"));
+        }
+#endif
+    }
+#else
+    void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
@@ -238,8 +272,40 @@ class TanhExecute :public Execute {
             batch[idx]->forward_drop(bTrain, drop_factor);
         }
     }
+#endif
 
-    inline void backward() {
+#if USE_GPU
+    void backward() {
+        int count = batch.size();
+        std::vector<dtype*> vals, losses, in_losses;
+        vals.reserve(count);
+        losses.reserve(count);
+        in_losses.reserve(count);
+        for (Node *n : batch) {
+            TanhNode *tanh = static_cast<TanhNode*>(n);
+#if TEST_CUDA
+            tanh->loss.copyFromHostToDevice();
+            tanh->in->loss.copyFromHostToDevice();
+#endif
+            vals.push_back(tanh->val.value);
+            losses.push_back(tanh->loss.value);
+            in_losses.push_back(tanh->in->loss.value);
+        }
+        n3ldg_cuda::TanhBackward(losses, vals, count, dim, drop_mask.value,
+                dynamicDropValue(), in_losses);
+#if TEST_CUDA
+        for (Node *n : batch) {
+            n->backward_drop();
+            n->backward();
+        }
+        for (Node *n : batch) {
+            TanhNode *tanh = static_cast<TanhNode*>(n);
+            n3ldg_cuda::Assert(tanh->in->loss.verify("TanhExecute backward"));
+        }
+#endif
+    }
+#else
+    void backward() {
         int count = batch.size();
         //#pragma omp parallel for
         for (int idx = 0; idx < count; idx++) {
@@ -247,6 +313,7 @@ class TanhExecute :public Execute {
             batch[idx]->backward();
         }
     }
+#endif
 };
 
 inline PExecute TanhNode::generate(bool bTrain, dtype cur_drop_factor) {
@@ -254,6 +321,7 @@ inline PExecute TanhNode::generate(bool bTrain, dtype cur_drop_factor) {
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
+    exec->dim = dim;
     return exec;
 };
 
@@ -305,8 +373,6 @@ class SigmoidNode :public Node {
 };
 
 class SigmoidExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -387,8 +453,6 @@ class ReluNode :public Node {
 };
 
 class ReluExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -480,8 +544,6 @@ class IndexNode :public Node {
 
 class IndexExecute : public Execute {
   public:
-    bool bTrain;
-  public:
     inline void  forward() {
         int count = batch.size();
         //#pragma omp parallel for
@@ -559,8 +621,6 @@ class PSubNode : public Node {
 
 
 class PSubExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();
@@ -648,8 +708,6 @@ class PDotNode : public Node {
 };
 
 class PDotExecute :public Execute {
-  public:
-    bool bTrain;
   public:
     inline void  forward() {
         int count = batch.size();

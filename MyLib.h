@@ -19,24 +19,13 @@
 
 #include "Def.h"
 #include "NRMat.h"
-#include <Eigen/Dense>
-#include <unsupported/Eigen/CXX11/Tensor>
+#include "Eigen/Dense"
+#include "Def.h"
 
 using namespace nr;
 using namespace std;
 using namespace Eigen;
 
-<<<<<<< HEAD
-=======
-#if USE_FLOAT
-typedef float dtype;
-typedef Eigen::TensorMap<Eigen::Tensor<float, 1>>  Vec;
-typedef Eigen::Map<Matrix<float, Dynamic, Dynamic, RowMajor> > Mat;
-#else
-typedef double dtype;
-typedef Eigen::TensorMap<Eigen::Tensor<double, 1>>  Vec;
-typedef Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > Mat;
-#endif
 
 >>>>>>> official
 typedef long long blong;
@@ -778,6 +767,23 @@ inline int cmpStringIntPairByValue(const pair<string, int> &x, const pair<string
     return x.second > y.second;
 }
 
+
+template <typename T, typename S>
+std::vector<S *> toPointers(std::vector<T> &v, int size) {
+    std::vector<S *> pointers;
+    for (int i = 0; i < size; ++i) {
+        pointers.push_back(&v.at(i));
+    }
+    return pointers;
+}
+
+
+template <typename T, typename S>
+std::vector<S *> toPointers(std::vector<T> &v) {
+    return toPointers<T, S>(v, v.size());
+}
+
+
 // for lowercase English only
 bool isPunctuation(const std::string &text) {
 	for (char c : text) {
@@ -788,9 +794,21 @@ bool isPunctuation(const std::string &text) {
 	return true;
 }
 
-bool isEqual(float a, float b) {
-	float c = a - b;
-	return c < 0.001 && c > -0.001;
+bool isEqual(dtype a, dtype b) {
+    float c = a - b;
+    if (c < 0.001 && c > -0.001) {
+        return true;
+    }
+    c = c / a;
+    return c < 0.001 && c > -0.001;
+}
+
+size_t typeHashCode(void *p) {
+    auto addr = reinterpret_cast<uintptr_t>(p);
+#if SIZE_MAX < UINTPTR_MAX
+    addr %= SIZE_MAX;
+#endif
+    return addr;
 }
 
 #define n3ldg_assert(assertion, message) \

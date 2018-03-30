@@ -1,29 +1,29 @@
 /*
- * SparseOP.h
+ * APOP.h
  *
  *  Created on: Jul 20, 2016
  *      Author: mason
  */
 
-#ifndef SPARSEOP_H_
-#define SPARSEOP_H_
+#ifndef APOP_H_
+#define APOP_H_
 
 #include "MyLib.h"
 #include "Alphabet.h"
 #include "Node.h"
 #include "Graph.h"
-#include "SparseParam.h"
+#include "APParam.h"
 
 // for sparse features
-class SparseParams {
+struct APParams {
   public:
-    SparseParam W;
+    APParam W;
     PAlphabet elems;
     int nVSize;
     int nDim;
 
   public:
-    SparseParams() {
+    APParams() {
         nVSize = 0;
         nDim = 0;
         elems = NULL;
@@ -42,7 +42,6 @@ class SparseParams {
         W.initial(nOSize, nVSize);
     }
 
-
     //random initialization
     inline void initial(PAlphabet alpha, int nOSize, int base = 1) {
         assert(base >= 1);
@@ -58,7 +57,7 @@ class SparseParams {
     inline int getFeatureId(const string& strFeat) {
         int idx = elems->from_string(strFeat);
         if(!elems->m_b_fixed && elems->m_size >= nVSize) {
-            std::cout << "Sparse Alphabet stopped collecting features" << std::endl;
+            std::cout << "AP Alphabet stopped collecting features" << std::endl;
             elems->set_fixed_flag(true);
         }
         return idx;
@@ -68,26 +67,27 @@ class SparseParams {
 
 //only implemented sparse linear node.
 //non-linear transformations are not support,
-class SparseNode : public Node {
+class APNode : public Node {
   public:
-    SparseParams* param;
+    APParams* param;
     vector<int> ins;
-
+    bool bTrain;
 
   public:
-    SparseNode() : Node() {
+    APNode() : Node() {
         ins.clear();
         param = NULL;
-        node_type = "sparsenode";
+        node_type = "apnode";
     }
 
-    inline void setParam(SparseParams* paramInit) {
+    inline void setParam(APParams* paramInit) {
         param = paramInit;
     }
 
     inline void clearValue() {
         Node::clearValue();
         ins.clear();
+        bTrain = false;
     }
 
   public:
@@ -103,11 +103,11 @@ class SparseNode : public Node {
         }
         degree = 0;
         cg->addNode(this);
+        bTrain = cg->train;
     }
-
   public:
     inline void compute() {
-        param->W.value(ins, val);
+        param->W.value(ins, val, bTrain);
     }
 
     //no output losses
@@ -124,7 +124,7 @@ class SparseNode : public Node {
         bool result = Node::typeEqual(other);
         if (!result) return false;
 
-        SparseNode* conv_other = (SparseNode*)other;
+        APNode* conv_other = (APNode*)other;
         if (param != conv_other->param) {
             return false;
         }
@@ -134,8 +134,7 @@ class SparseNode : public Node {
 
 };
 
-
-class SparseExecute :public Execute {
+class APExecute :public Execute {
   public:
     inline void  forward() {
         int count = batch.size();
@@ -157,12 +156,12 @@ class SparseExecute :public Execute {
 };
 
 
-inline PExecute SparseNode::generate(bool bTrain, dtype cur_drop_factor) {
-    SparseExecute* exec = new SparseExecute();
+inline PExecute APNode::generate(bool bTrain, dtype cur_drop_factor) {
+    APExecute* exec = new APExecute();
     exec->batch.push_back(this);
     exec->bTrain = bTrain;
     exec->drop_factor = cur_drop_factor;
     return exec;
 }
 
-#endif /* SPARSEOP_H_ */
+#endif /* APOP_H_ */
