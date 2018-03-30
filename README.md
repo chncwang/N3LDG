@@ -24,5 +24,9 @@ Some examples are realeased at:
 for cuda usage, see:
 * https://github.com/chncwang/news-title-classification
 
-##Author:
+for cuda usage, see:
+
+https://github.com/chncwang/news-title-classification
+
+##Authors:
 Zhang Meishan, Li Zhenghua, Wang Qiansheng, Yu Nan
