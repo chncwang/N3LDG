@@ -179,7 +179,7 @@ class TanhExecute :public Execute {
         }
 
         CalculateDropMask(count, dim, drop_mask);
-        n3ldg_cuda::TanhForward(xs, count, dim, drop_mask.value,
+        n3ldg_cuda::TanhForward(n3ldg_cuda::ActivatedEnum::TANH, xs, count, dim, drop_mask.value,
                 this->dynamicDropValue(), ys);
 #if TEST_CUDA
         drop_mask.copyFromDeviceToHost();
@@ -224,7 +224,7 @@ class TanhExecute :public Execute {
             losses.push_back(tanh->loss.value);
             in_losses.push_back(tanh->in->loss.value);
         }
-        n3ldg_cuda::TanhBackward(losses, vals, count, dim, drop_mask.value,
+        n3ldg_cuda::TanhBackward(n3ldg_cuda::ActivatedEnum::TANH, losses, vals, count, dim, drop_mask.value,
                 dynamicDropValue(), in_losses);
 #if TEST_CUDA
         for (Node *n : batch) {

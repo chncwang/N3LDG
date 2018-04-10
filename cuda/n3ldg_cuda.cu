@@ -584,7 +584,9 @@ void Activated(ActivatedEnum activated, const dtype *src,
             dest2, count, len, is_being_trained, drop_factor, drop_mask);
 }
 
-__global__ void KernelTanhForward(const dtype** xs, int count, int dim,
+__global__ void KernelTanhForward(ActivatedEnum activated, const dtype** xs,
+        int count,
+        int dim,
         const dtype* drop_mask,
         dtype drop_factor,
         dtype**ys) {
@@ -596,12 +598,20 @@ __global__ void KernelTanhForward(const dtype** xs, int count, int dim,
         if (drop_factor > 0.0f && drop_mask[i] < drop_factor) {
             ys[count_i][dim_i] = 0.0f;
         } else {
-            ys[count_i][dim_i] = cuda_tanh(xs[count_i][dim_i]);
+            if (activated == ActivatedEnum::TANH) {
+                ys[count_i][dim_i] = cuda_tanh(xs[count_i][dim_i]);
+            } else if (activated == ActivatedEnum::SIGMOID) {
+                ys[count_i][dim_i] = cuda_sigmoid(xs[count_i][dim_i]);
+            } else {
+                printf("error\n");
+            }
         }
     }
 }
 
-void TanhForward(const std::vector<dtype*> &xs, int count, int dim,
+void TanhForward(ActivatedEnum activated, const std::vector<dtype*> &xs,
+        int count,
+        int dim,
         const dtype *drop_mask,
         dtype drop_factor,
         std::vector<dtype*> &ys) {
@@ -612,11 +622,14 @@ void TanhForward(const std::vector<dtype*> &xs, int count, int dim,
     x_arr.init((dtype**)xs.data(), xs.size());
     y_arr.init((dtype**)ys.data(), ys.size());
     int block_count = DefaultBlockCount(count * dim);
-    KernelTanhForward<<<block_count, TPB>>>((const dtype**)x_arr.value, count,
-            dim, drop_mask, drop_factor, y_arr.value);
+    KernelTanhForward<<<block_count, TPB>>>(activated,
+            (const dtype**)x_arr.value, count, dim, drop_mask, drop_factor,
+            y_arr.value);
 }
 
-__global__ void KernelTanhBackward(const dtype **losses, const dtype **vals,
+__global__ void KernelTanhBackward(ActivatedEnum activated,
+        const dtype **losses,
+        const dtype **vals,
         int count,
         int dim,
         const dtype* drop_mask,
@@ -628,14 +641,20 @@ __global__ void KernelTanhBackward(const dtype **losses, const dtype **vals,
         int count_i = i / dim;
         int dim_i = i % dim;
         if (drop_factor <= 0.0f || drop_mask[i] > drop_factor) {
-            dtype v = losses[count_i][dim_i] * (1 - vals[count_i][dim_i] *
-                    vals[count_i][dim_i]);
+            dtype v;
+            if (activated == ActivatedEnum::TANH) {
+                v = losses[count_i][dim_i] * (1 - vals[count_i][dim_i] *
+                        vals[count_i][dim_i]);
+            } else if (activated == ActivatedEnum::SIGMOID) {
+                v = losses[count_i][dim_i] * (1 - vals[count_i][dim_i]) *
+                    vals[count_i][dim_i];
+            }
             atomicAdd(in_losses[count_i] + dim_i, v);
         }
     }
 }
 
-void TanhBackward(const std::vector<dtype*> &losses,
+void TanhBackward(ActivatedEnum activated, const std::vector<dtype*> &losses,
         const std::vector<dtype*> &vals,
         int count,
         int dim,
@@ -650,7 +669,7 @@ void TanhBackward(const std::vector<dtype*> &losses,
     val_arr.init((dtype**)vals.data(), vals.size());
     in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
     int block_count = DefaultBlockCount(count * dim);
-    KernelTanhBackward<<<block_count, TPB>>>((const dtype**)loss_arr.value,
+    KernelTanhBackward<<<block_count, TPB>>>(activated ,(const dtype**)loss_arr.value,
             (const dtype**)val_arr.value, count, dim, drop_mask, drop_factor,
             in_loss_arr.value);
 }
