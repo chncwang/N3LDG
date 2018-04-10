@@ -111,11 +111,9 @@ class Graph {
     inline void clearValue(const bool& bTrain = false) {
         int count = execs.size();
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("clearValue delete");
         for (int idx = 0; idx < count; idx++) {
             delete execs.at(idx);
         }
-        profiler.EndEvent();
         execs.clear();
 
         std::set<PNode> uncleared_nodes;

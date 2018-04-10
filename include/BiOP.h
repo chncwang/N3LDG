@@ -381,7 +381,18 @@ class BiExecute :public Execute {
             }
         }
 
-        ty.mat() = param->W1.val.mat() * x1.mat() + param->W2.val.mat() * x2.mat();
+        Tensor2D ty1, ty2;
+        ty1.init(outDim, count);
+        ty2.init(outDim, count);
+
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("matrix multi");
+        ty1.mat() = param->W1.val.mat() * x1.mat();
+        profiler.EndEvent();
+        profiler.BeginEvent("matrix multi");
+        ty2.mat() = param->W2.val.mat() * x2.mat();
+        profiler.EndEvent();
+        ty.mat() = ty1.mat() + ty2.mat();
 
         if (param->bUseB) {
             ty.vec() = ty.vec() + b.vec();
@@ -512,8 +523,13 @@ class BiExecute :public Execute {
 
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
 
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("matrix multi");
         param->W1.grad.mat() += lty.mat() * x1.mat().transpose();
+        profiler.EndEvent();
+        profiler.BeginEvent("matrix multi");
         param->W2.grad.mat() += lty.mat() * x2.mat().transpose();
+        profiler.EndEvent();
 
         if (param->bUseB) {
             for (int idx = 0; idx < count; idx++) {
@@ -523,8 +539,12 @@ class BiExecute :public Execute {
             }
         }
 
+        profiler.BeginEvent("matrix multi");
         lx1.mat() += param->W1.val.mat().transpose() * lty.mat();
+        profiler.EndEvent();
+        profiler.BeginEvent("matrix multi");
         lx2.mat() += param->W2.val.mat().transpose() * lty.mat();
+        profiler.EndEvent();
 
         for (int idx = 0; idx < count; idx++) {
             BiNode* ptr = (BiNode*)batch[idx];

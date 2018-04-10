@@ -326,7 +326,6 @@ class UniExecute :public Execute {
 
     inline void  forward() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("UniExecute forward");
         int count = batch.size();
         ty.init(outDim, count);
         x.init(inDim, count);
@@ -423,7 +422,9 @@ class UniExecute :public Execute {
             }
         }
 
+        profiler.BeginEvent("matrix multi");
         ty.mat() = param->W.val.mat() * x.mat();
+        profiler.EndEvent();
 
         if (param->bUseB) {
             ty.vec() = ty.vec() + b.vec();
@@ -443,7 +444,6 @@ class UniExecute :public Execute {
             batch[i]->forward_drop(bTrain, drop_factor);
         }
 #endif
-        profiler.EndCudaEvent();
     }
 
     void backward() {
@@ -543,7 +543,10 @@ class UniExecute :public Execute {
         }
 
         lty.vec() = ly.vec() * ty.vec().binaryExpr(y.vec(), ptr_fun(derivate));
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("matrix multi");
         param->W.grad.mat() += lty.mat() * x.mat().transpose();
+        profiler.EndEvent();
 
         if (param->bUseB) {
             for (int idx = 0; idx < count; idx++) {
@@ -553,7 +556,13 @@ class UniExecute :public Execute {
             }
         }
 
-        lx.mat() += param->W.val.mat().transpose() * lty.mat();
+        Tensor2D lxt;
+        lxt.init(inDim, count);
+        profiler.BeginEvent("matrix multi");
+        lxt.mat() = param->W.val.mat().transpose() * lty.mat();
+        profiler.EndEvent();
+
+        lx.mat() += lxt.mat();;
 
         for (int idx = 0; idx < count; idx++) {
             UniNode* ptr = (UniNode*)batch[idx];
@@ -755,7 +764,10 @@ class LinearExecute :public Execute {
             }
         }
 
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
+        profiler.BeginEvent("matrix multi");
         y.mat() = param->W.val.mat() * x.mat();
+        profiler.EndEvent();
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
@@ -778,10 +790,15 @@ class LinearExecute :public Execute {
                 ly[idy][idx] = ptr->loss[idy];
             }
         }
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
 
+        profiler.BeginEvent("matrix multi");
         param->W.grad.mat() += ly.mat() * x.mat().transpose();
+        profiler.EndEvent();
 
+        profiler.BeginEvent("matrix multi");
         lx.mat() += param->W.val.mat().transpose() * ly.mat();
+        profiler.EndEvent();
 
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
