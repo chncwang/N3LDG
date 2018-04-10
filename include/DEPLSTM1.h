@@ -226,7 +226,7 @@ class TreeLSTM1Builder {
     }
 
   public:
-    inline void forward(Graph *cg, const vector<PNode>& x, const vector<int>& heads, const vector<string>& labels) {
+    inline void forward(Graph *cg, const vector<PNode>& x, const vector<int>& heads) {
         if (x.size() == 0) {
             std::cout << "empty inputs for lstm operation" << std::endl;
             return;
@@ -235,14 +235,14 @@ class TreeLSTM1Builder {
         _nSize = x.size();
 
         if (_bottom2top) {
-            btforward(cg, x, heads, labels);
+            btforward(cg, x, heads);
         } else {
-            tbforward(cg, x, heads, labels);
+            tbforward(cg, x, heads);
         }
     }
 
   protected:
-    inline void btforward(Graph *cg, const vector<PNode>& x, const vector<int>& heads, const vector<string>& labels) {
+    inline void btforward(Graph *cg, const vector<PNode>& x, const vector<int>& heads) {
         vector<vector<int> > children;
         vector<bool> computed;
         children.resize(_nSize);
@@ -334,7 +334,7 @@ class TreeLSTM1Builder {
         }
     }
 
-    inline void tbforward(Graph *cg, const vector<PNode>& x, const vector<int>& heads, const vector<string>& labels) {
+    inline void tbforward(Graph *cg, const vector<PNode>& x, const vector<int>& heads) {
         if (x.size() == 0) {
             std::cout << "empty inputs for lstm operation" << std::endl;
             return;
