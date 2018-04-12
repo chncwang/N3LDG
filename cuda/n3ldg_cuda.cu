@@ -85,10 +85,7 @@ cublasHandle_t& GetCublasHandle() {
 
 cudaError_t MyCudaMemcpy(void *dest, const void *src, size_t count,
         cudaMemcpyKind kind) {
-    Profiler &profiler = Profiler::Ins();
-    profiler.BeginEvent("cudaMemcpy");
     cudaError_t e = cudaMemcpy(dest, src, count, kind);
-    profiler.EndEvent();
     return e;
 }
 
@@ -915,15 +912,18 @@ bool Verify(int *host, int *device, int len, const char* message) {
 }
 
 cudaError_t MemoryPool::Malloc(void **p, int size) {
+    Profiler &profiler = Profiler::Ins();
     assert(*p == NULL);
 #if DEVICE_MEMORY == 0
     CallCnmem(cnmemMalloc(p, size, NULL));
     return cudaSuccess;
 #elif DEVICE_MEMORY == 1
-    return cudaMalloc(p, size);
+    profiler.BeginEvent("malloc");
+    cudaError_t r = cudaMalloc(p, size);
+    profiler.EndEvent();
+    return r;
 #else
-    Profiler &profiler = Profiler::Ins();
-    profiler.BeginEvent("MemoryPool Malloc");
+    profiler.BeginEvent("malloc");
     int fit_size = 1;
     int n = 0;
     while (fit_size < size) {
@@ -953,9 +953,12 @@ cudaError_t MemoryPool::Free(void *p) {
 #if DEVICE_MEMORY == 0
     CallCnmem(cnmemFree(p, NULL));
 #elif DEVICE_MEMORY == 1
-    return cudaFree(p);
+    profiler.BeginEvent("free");
+    cudaError_t r = cudaFree(p);
+    profiler.EndEvent();
+    return r;
 #else
-    profiler.BeginEvent("MemoryPool Free");
+    profiler.BeginEvent("free");
     auto it = busy_blocks_.find(p);
     if (it == busy_blocks_.end()) {
         abort();

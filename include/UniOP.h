@@ -325,8 +325,6 @@ class UniExecute :public Execute {
     Tensor2D drop_mask;
 
     inline void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("UniExecute forward");
         int count = batch.size();
         ty.init(outDim, count);
         x.init(inDim, count);
@@ -443,7 +441,6 @@ class UniExecute :public Execute {
             batch[i]->forward_drop(bTrain, drop_factor);
         }
 #endif
-        profiler.EndCudaEvent();
     }
 
     void backward() {
@@ -615,8 +612,6 @@ public:
     UniParams* param;
 
     void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("LinearExecute forward");
         int count = batch.size();
 
         x.init(inDim, count);
@@ -664,7 +659,6 @@ public:
         }
 #endif
 
-        profiler.EndCudaEvent();
     }
 
     void backward() {

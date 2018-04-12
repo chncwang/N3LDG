@@ -161,8 +161,6 @@ class ConcatExecute : public Execute {
     Tensor2D drop_mask;
 
     void  forward() {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("ConcatNode forward");
         int count = batch.size();
         drop_mask.init(outDim, count);
         CalculateDropMask(count, outDim, drop_mask);
@@ -186,7 +184,6 @@ class ConcatExecute : public Execute {
             n3ldg_cuda::Assert(batch[idx]->val.verify("concat forward"));
         }
 #endif
-        profiler.EndCudaEvent();
     }
 
     void backward() {

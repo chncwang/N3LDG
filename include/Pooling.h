@@ -326,8 +326,6 @@ public:
     std::vector<int> in_counts;
 
     void forward() override {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("MaxPoolNode forward");
         int count = batch.size();
         hit_inputs.init(count * dim);
         in_counts.reserve(count);
@@ -360,7 +358,6 @@ public:
             }
         }
 #endif
-        profiler.EndCudaEvent();
     }
 
     void backward() override {
@@ -411,8 +408,6 @@ public:
     std::vector<int> in_counts;
 
     void forward() override {
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("MinPoolNode forward");
         int count = batch.size();
         hit_inputs.init(count * dim);
         in_counts.reserve(count);
@@ -445,7 +440,6 @@ public:
             }
         }
 #endif
-        profiler.EndCudaEvent();
     }
 
     void backward() override {
