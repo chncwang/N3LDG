@@ -474,6 +474,17 @@ void TanhBackward(ActivatedEnum activated, const std::vector<dtype*> &losses,
         const dtype *drop_mask,
         dtype drop_factor,
         std::vector<dtype*> &in_losses);
+void DropoutForward(const std::vector<dtype*> &xs, int count, int dim,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        std::vector<dtype*> &ys);
+void DropoutBackward(const std::vector<dtype*> &losses,
+        const std::vector<dtype*> &vals,
+        int count,
+        int dim,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        std::vector<dtype*> &in_losses);
 void CopyForUniNodeForward(const void *graph, const dtype* b, dtype* xs_dest,
         dtype* b_dest, int count, int x_len, int b_len, bool use_b);
 void CopyForBiNodeForward(const std::vector<dtype*>& x1s,

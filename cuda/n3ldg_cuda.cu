@@ -671,6 +671,75 @@ void TanhBackward(ActivatedEnum activated, const std::vector<dtype*> &losses,
             in_loss_arr.value);
 }
 
+__global__ void KernelDropoutForward(const dtype** xs, int count, int dim,
+        const dtype* drop_mask,
+        dtype drop_factor,
+        dtype**ys) {
+    int index = DeviceDefaultIndex();
+    int step = DeviceDefaultStep();
+    for (int i = index; i < dim * count; i += step) {
+        int count_i = i / dim;
+        int dim_i = i % dim;
+        if (drop_factor > 0.0f && drop_mask[i] < drop_factor) {
+            ys[count_i][dim_i] = 0.0f;
+        } else {
+            ys[count_i][dim_i] = xs[count_i][dim_i];
+        }
+    }
+}
+
+void DropoutForward(const std::vector<dtype*> &xs, int count, int dim,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        std::vector<dtype*> &ys) {
+    if (drop_factor < 0) {
+        drop_factor = 0.0f;
+    }
+    NumberPointerArray x_arr, y_arr;
+    x_arr.init((dtype**)xs.data(), xs.size());
+    y_arr.init((dtype**)ys.data(), ys.size());
+    int block_count = DefaultBlockCount(count * dim);
+    KernelDropoutForward<<<block_count, TPB>>>((const dtype**)x_arr.value,
+            count, dim, drop_mask, drop_factor, y_arr.value);
+}
+
+__global__ void KernelDropoutBackward(const dtype **losses, const dtype **vals,
+        int count,
+        int dim,
+        const dtype* drop_mask,
+        dtype drop_factor,
+        dtype** in_losses) {
+    int index = DeviceDefaultIndex();
+    int step = DeviceDefaultStep();
+    for (int i = index; i < dim * count; i += step) {
+        int count_i = i / dim;
+        int dim_i = i % dim;
+        if (drop_factor <= 0.0f || drop_mask[i] > drop_factor) {
+            atomicAdd(in_losses[count_i] + dim_i, losses[count_i][dim_i]);
+        }
+    }
+}
+
+void DropoutBackward(const std::vector<dtype*> &losses,
+        const std::vector<dtype*> &vals,
+        int count,
+        int dim,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        std::vector<dtype*> &in_losses) {
+    if (drop_factor < 0) {
+        drop_factor = 0.0f;
+    }
+    NumberPointerArray loss_arr, val_arr, in_loss_arr;
+    loss_arr.init((dtype**)losses.data(), losses.size());
+    val_arr.init((dtype**)vals.data(), vals.size());
+    in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
+    int block_count = DefaultBlockCount(count * dim);
+    KernelDropoutBackward<<<block_count, TPB>>>((const dtype**)loss_arr.value,
+            (const dtype**)val_arr.value, count, dim, drop_mask, drop_factor,
+            in_loss_arr.value);
+}
+
 __global__ void KernelCopyForUniNodeForward(const dtype** xs, const dtype* b,
         dtype* xs_dest,
         dtype* b_dest,
