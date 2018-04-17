@@ -164,6 +164,7 @@ class Graph {
 
     //real executation
     void compute() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
 #if USE_GPU
         if (host_memory == NULL) {
             host_memory = n3ldg_cuda::GraphHostAlloc();
@@ -195,7 +196,9 @@ class Graph {
             }
 
             for (PExecute e : cur_execs) {
+                profiler.BeginEvent("forward");
                 e->forward();
+                profiler.EndEvent();
                 execs.push_back(e);
             }
 
