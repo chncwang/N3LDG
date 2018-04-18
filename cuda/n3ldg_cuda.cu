@@ -1620,7 +1620,7 @@ void LookupBackward(const std::vector<int> &xids, int unknown_id,
 }
 
 __global__ void KernelPoolForward(PoolingEnum pooling, dtype **ins,
-        int64_t *in_counts, int max_in_count, dtype **outs, int count, int dim,
+        int *in_counts, int max_in_count, dtype **outs, int count, int dim,
         int* hit_inputs) {
     __shared__ volatile extern dtype pool_shared_arr[];
     volatile dtype* shared_indexers = pool_shared_arr + blockDim.x;
@@ -1662,8 +1662,12 @@ __global__ void KernelPoolForward(PoolingEnum pooling, dtype **ins,
     }
 }
 
-void PoolForward(PoolingEnum pooling, const void *graph, int count,
-        const std::vector<int> &in_counts, int dim, int *hit_inputs) {
+void PoolForward(PoolingEnum pooling, const std::vector<dtype*> &in_vals,
+        std::vector<dtype*> &vals,
+        int count,
+        const std::vector<int> &in_counts,
+        int dim,
+        int *hit_inputs) {
     int max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
     int thread_count = 8;
     while (max_in_count > thread_count) {
@@ -1671,14 +1675,16 @@ void PoolForward(PoolingEnum pooling, const void *graph, int count,
     }
     dim3 block_dim(dim, count, 1);
 
-    dtype **outs = (dtype**)graph;
-    graph = (char*)graph + 2 * count * sizeof(dtype*);
-    dtype **ins = (dtype**)graph;
-    graph = (char*)graph + 2 * count * max_in_count * sizeof(dtype*);
-    int64_t *in_counts_device = (int64_t*)graph;
+    NumberPointerArray in_val_arr;
+    in_val_arr.init((dtype**)in_vals.data(), in_vals.size());
+    NumberPointerArray val_arr;
+    val_arr.init((dtype**)vals.data(), vals.size());
+    IntArray in_count_arr;
+    in_count_arr.init((int*)in_counts.data(), in_counts.size());
+
     KernelPoolForward<<<block_dim, thread_count, thread_count * 2 *
-        sizeof(dtype)>>>(pooling, ins, in_counts_device, max_in_count, outs,
-                count, dim, hit_inputs);
+        sizeof(dtype)>>>(pooling, in_val_arr.value, in_count_arr.value,
+                max_in_count, val_arr.value, count, dim, hit_inputs);
 }
 
 __global__ void KernelPoolBackward(const dtype ** losses,

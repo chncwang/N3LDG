@@ -332,14 +332,24 @@ public:
         for (Node *n : batch) {
             MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
             in_counts.push_back(m->ins.size());
-#if TEST_CUDA
-            for (Node *nn : m->ins) {
-                n3ldg_cuda::Assert(nn->val.verify(
-                            "max pooling forward input"));
-            }
-#endif
         }
-        n3ldg_cuda::PoolForward(n3ldg_cuda::PoolingEnum::MAX, graph_info,
+        int max_in_count = *std::max_element(in_counts.begin(),
+                in_counts.end());
+        std::vector<dtype*> in_vals;
+        in_vals.reserve(count * max_in_count);
+        std::vector<dtype*> vals;
+        vals.reserve(count);
+        for (Node *n : batch) {
+            MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
+            vals.push_back(m->val.value);
+            for (Node *in : m->ins) {
+                in_vals.push_back(in->val.value);
+            }
+            for (int i = 0; i < max_in_count - m->ins.size(); ++i) {
+                in_vals.push_back(NULL);
+            }
+        }
+        n3ldg_cuda::PoolForward(n3ldg_cuda::PoolingEnum::MAX, in_vals, vals,
                 count, in_counts, dim, hit_inputs.value);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
@@ -414,14 +424,24 @@ public:
         for (Node *n : batch) {
             MinPoolNode *m = static_cast<MinPoolNode*>(n);
             in_counts.push_back(m->ins.size());
-#if TEST_CUDA
-            for (Node *nn : m->ins) {
-                n3ldg_cuda::Assert(nn->val.verify(
-                            "min pooling forward input"));
-            }
-#endif
         }
-        n3ldg_cuda::PoolForward(n3ldg_cuda::PoolingEnum::MIN, graph_info,
+        int max_in_count = *std::max_element(in_counts.begin(),
+                in_counts.end());
+        std::vector<dtype*> in_vals;
+        in_vals.reserve(count * max_in_count);
+        std::vector<dtype*> vals;
+        vals.reserve(count);
+        for (Node *n : batch) {
+            MaxPoolNode *m = static_cast<MaxPoolNode*>(n);
+            vals.push_back(m->val.value);
+            for (Node *in : m->ins) {
+                in_vals.push_back(in->val.value);
+            }
+            for (int i = 0; i < max_in_count - m->ins.size(); ++i) {
+                in_vals.push_back(NULL);
+            }
+        }
+        n3ldg_cuda::PoolForward(n3ldg_cuda::PoolingEnum::MIN, in_vals, vals,
                 count, in_counts, dim, hit_inputs.value);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {

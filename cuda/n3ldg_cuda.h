@@ -566,8 +566,12 @@ void LookupBackward(const std::vector<int> &xids, int unknown_id,
         int dim,
         dtype *grad,
         bool *indexers);
-void PoolForward(PoolingEnum pooling, const void *graph, int count,
-        const std::vector<int> &in_counts, int dim, int *hit_inputs);
+void PoolForward(PoolingEnum pooling, const std::vector<dtype*> &in_vals,
+        std::vector<dtype*> &vals,
+        int count,
+        const std::vector<int> &in_counts,
+        int dim,
+        int *hit_inputs);
 void PoolBackward(const void *graph,
         const std::vector<int> &in_counts, const int *hit_inputs, int count,
         int dim);
