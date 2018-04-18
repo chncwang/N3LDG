@@ -347,7 +347,7 @@ class UniExecute :public Execute {
             ys.push_back(n->val.value);
         }
 
-        n3ldg_cuda::CopyForUniNodeForward(graph_info, param->b.val.value,
+        n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value,
                 x.value, ty.value, count, inDim, outDim, param->bUseB);
 
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value,
@@ -630,7 +630,7 @@ public:
             ys.push_back(n->val.value);
         }
 
-        n3ldg_cuda::CopyForUniNodeForward(graph_info, param->b.val.value,
+        n3ldg_cuda::CopyForUniNodeForward(xs, param->b.val.value,
                 x.value, y.value, count, inDim, outDim, param->bUseB);
 
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value, y.value,

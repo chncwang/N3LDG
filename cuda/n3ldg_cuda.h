@@ -485,8 +485,13 @@ void DropoutBackward(const std::vector<dtype*> &losses,
         const dtype *drop_mask,
         dtype drop_factor,
         std::vector<dtype*> &in_losses);
-void CopyForUniNodeForward(const void *graph, const dtype* b, dtype* xs_dest,
-        dtype* b_dest, int count, int x_len, int b_len, bool use_b);
+void CopyForUniNodeForward(const std::vector<dtype*> &xs, const dtype* b,
+        dtype* xs_dest,
+        dtype* b_dest,
+        int count,
+        int x_len,
+        int b_len,
+        bool use_b);
 void CopyForBiNodeForward(const std::vector<dtype*>& x1s,
         const std::vector<dtype *>& x2s,
         const dtype *b,

@@ -764,18 +764,20 @@ __global__ void KernelCopyForUniNodeForward(const dtype** xs, const dtype* b,
     }
 }
 
-void CopyForUniNodeForward(const void *graph, const dtype* b,
+void CopyForUniNodeForward(const std::vector<dtype*> &xs, const dtype* b,
         dtype* xs_dest,
         dtype* b_dest,
         int count,
         int x_len,
         int b_len,
         bool use_b) {
-    dtype **xs = (dtype**)((char*)graph + 2 * count * sizeof(dtype*));
+    NumberPointerArray x_arr;
+    x_arr.init((dtype**)xs.data(), xs.size());
     int len = x_len + b_len;
     int block_count = std::min((count * len - 1 + TPB) / TPB, 56);
-    KernelCopyForUniNodeForward<<<block_count, TPB>>>((const dtype**)xs,
-            (const dtype*)b, xs_dest, b_dest, count, x_len, b_len, use_b);
+    KernelCopyForUniNodeForward<<<block_count, TPB>>>(
+            (const dtype**)x_arr.value, (const dtype*)b, xs_dest, b_dest,
+            count, x_len, b_len, use_b);
 }
 
 __global__ void KernelCopyForBiNodeForward(const dtype **x1s,
