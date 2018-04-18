@@ -510,13 +510,15 @@ __global__ void KernelCopyFromOneVectorToMultiVectors(const dtype *src,
     }
 }
 
-void CopyFromOneVectorToMultiVals(const void *graph, const dtype *src,
-        int count, int len) {
-    dtype **vals = (dtype**)graph;
+void CopyFromOneVectorToMultiVals(const dtype *src, std::vector<dtype*> &vals,
+        int count,
+        int len) {
+    NumberPointerArray val_arr;
+    val_arr.init((dtype**)vals.data(), vals.size());
     int block_count = (len * count - 1 + TPB) / TPB;
     block_count = std::min(block_count, BLOCK_COUNT);
-    KernelCopyFromOneVectorToMultiVectors<<<block_count, TPB>>>(src, vals,
-            count, len);
+    KernelCopyFromOneVectorToMultiVectors<<<block_count, TPB>>>(src,
+            val_arr.value, count, len);
 }
 
 __global__ void KernelActivated(ActivatedEnum activated, const dtype *src,

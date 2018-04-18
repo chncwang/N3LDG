@@ -436,8 +436,9 @@ void PrintInts(const int* p, int len);
 void InitCuda();
 void EndCuda();
 
-void CopyFromOneVectorToMultiVals(const void *graph, const dtype *src,
-        int count, int len);
+void CopyFromOneVectorToMultiVals(const dtype *src, std::vector<dtype*> &vals,
+        int count,
+        int len);
 
 enum ActivatedEnum {
     TANH,

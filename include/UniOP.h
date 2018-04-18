@@ -636,8 +636,13 @@ public:
         n3ldg_cuda::MatrixMultiplyMatrix(param->W.val.value, x.value, y.value,
                 outDim, inDim, count, false);
 
-        n3ldg_cuda::CopyFromOneVectorToMultiVals(graph_info, y.value, count,
-                outDim);
+        std::vector<dtype*> vals;
+        vals.reserve(count);
+        for (Node *node : batch) {
+            vals.push_back(node->val.value);
+        }
+
+        n3ldg_cuda::CopyFromOneVectorToMultiVals(y.value, vals, count, outDim);
 #if TEST_CUDA
         for (int idx = 0; idx < count; idx++) {
             LinearNode* ptr = (LinearNode*)batch[idx];
