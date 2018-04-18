@@ -109,11 +109,9 @@ public:
         for (int idx = 0; idx < count; idx++) {
             sumDim += batch[idx]->dim;
         }
-
         y.init(sumDim);
         x1.init(sumDim);
         x2.init(sumDim);
-
         int offset = 0;
         for (int idx = 0; idx < count; idx++) {
             PMultiNode* ptr = (PMultiNode*)batch[idx];
@@ -123,7 +121,6 @@ public:
             }
             offset += ptr->dim;
         }
-
         y.vec() = x1.vec() * x2.vec();
 
         offset = 0;
@@ -175,21 +172,10 @@ public:
     void backward() {
         int count = batch.size();
         //#pragma omp parallel for
-        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-        profiler.BeginEvent("PMultiOP no-batch backward");
-        for (int idx = 0; idx < count; idx++) {
-            batch[idx]->backward_drop();
-            batch[idx]->backward();
-        }
-        profiler.EndEvent();
-
-        profiler.BeginEvent("PMultiOP batch backward");
-
         Tensor1D ly, lx1, lx2;
         ly.init(sumDim);
         lx1.init(sumDim);
         lx2.init(sumDim);
-
         int offset = 0;
         for (int idx = 0; idx < count; idx++) {
             PMultiNode* ptr = (PMultiNode*)batch[idx];
@@ -199,10 +185,8 @@ public:
             }
             offset += ptr->dim;
         }
-
         lx1.vec() = ly.vec() * x2.vec();
         lx2.vec() = ly.vec() * x1.vec();
-
         offset = 0;
         for (int idx = 0; idx < count; idx++) {
             PMultiNode* ptr = (PMultiNode*)batch[idx];
@@ -212,13 +196,7 @@ public:
             }
             offset += ptr->dim;
         }
-        profiler.EndEvent();
-
-    
-    
     }
-
-
 #endif
 };
 
