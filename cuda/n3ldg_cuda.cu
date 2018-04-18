@@ -1363,7 +1363,7 @@ __global__ void KernelConcatForward(dtype **ins, int *in_dims,
 
 void ConcatForward(const std::vector<dtype*> &in_vals,
         const std::vector<int> &in_dims,
-        const std::vector<dtype*> &vals,
+        std::vector<dtype*> &vals,
         bool on_training,
         const dtype *drop_mask,
         dtype drop_factor,
@@ -1387,7 +1387,7 @@ void ConcatForward(const std::vector<dtype*> &in_vals,
             drop_factor, count, in_count, out_dim);
 }
 
-__global__ void KernelConcatBackward(dtype** in_losses, int64_t *in_dims,
+__global__ void KernelConcatBackward(dtype** in_losses, int *in_dims,
         dtype **out_losses,
         const dtype *drop_mask,
         dtype drop_factor,
@@ -1420,8 +1420,14 @@ __global__ void KernelConcatBackward(dtype** in_losses, int64_t *in_dims,
     }
 }
 
-void ConcatBackward(const void *graph, const dtype *drop_mask,
-        dtype drop_factor, int count, int in_count, int out_dim) {
+void ConcatBackward(const std::vector<dtype*> &in_losses,
+        const std::vector<int> &in_dims,
+        std::vector<dtype*> &losses,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        int count,
+        int in_count,
+        int out_dim) {
     assert(drop_factor < 1);
     if (drop_factor < 0) {
         drop_factor = 0;
@@ -1429,15 +1435,15 @@ void ConcatBackward(const void *graph, const dtype *drop_mask,
     int len = count * out_dim;
     int block_count = std::min(BLOCK_COUNT, (len - 1 + TPB) / TPB);
 
-    graph = (char*)graph + count * sizeof(dtype*);
-    dtype **out_losses = (dtype**)graph;
-    graph = (char*)graph + count * (1 + in_count) * sizeof(dtype*);
-    dtype ** in_losses = (dtype**)graph;
-    graph = (char*)graph + count * in_count * sizeof(dtype*);
-    int64_t *in_dims = (int64_t*)graph;
+    NumberPointerArray in_loss_arr, loss_arr;
+    in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
+    loss_arr.init((dtype**)losses.data(), losses.size());
+    IntArray in_dim_arr;
+    in_dim_arr.init((int*)in_dims.data(), in_dims.size());
 
-    KernelConcatBackward<<<block_count, TPB>>>(in_losses, in_dims, out_losses,
-            drop_mask, drop_factor, count, in_count, out_dim);
+    KernelConcatBackward<<<block_count, TPB>>>(in_loss_arr.value,
+            in_dim_arr.value, loss_arr.value, drop_mask, drop_factor, count,
+            in_count, out_dim);
 }
 
 __global__ void KernelMemset(dtype *p, int len, dtype value) {
