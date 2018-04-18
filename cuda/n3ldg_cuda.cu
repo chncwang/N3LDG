@@ -488,7 +488,7 @@ void InitCuda() {
     device.device = 1;
     cnmemInit(1, &device, CNMEM_FLAGS_DEFAULT);
 #else
-    CallCuda(cudaSetDevice(1));
+    CallCuda(cudaSetDevice(0));
 #endif
     CallCuda(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
     CallCuda(cudaPrintfInit());
@@ -1308,7 +1308,7 @@ void CalculateDropoutMask(dtype drop_factor, int count, int dim, dtype* mask) {
     CallCurand(curandGenerateUniform(gen, mask, count * dim));
 }
 
-__global__ void KernelConcatForward(dtype **ins, int64_t *in_dims,
+__global__ void KernelConcatForward(dtype **ins, int *in_dims,
         dtype **outs,
         bool on_training,
         const dtype *drop_mask,
@@ -1361,21 +1361,30 @@ __global__ void KernelConcatForward(dtype **ins, int64_t *in_dims,
     }
 }
 
-void ConcatForward(const void *graph, bool on_training, const dtype *drop_mask,
-        dtype drop_factor, int count, int in_count, int out_dim) {
+void ConcatForward(const std::vector<dtype*> &in_vals,
+        const std::vector<int> &in_dims,
+        const std::vector<dtype*> &vals,
+        bool on_training,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        int count,
+        int in_count,
+        int out_dim) {
     assert(drop_factor < 1);
     if (drop_factor < 0) {
         drop_factor = 0;
     }
     int len = count * out_dim;
     int block_count = std::min(BLOCK_COUNT, (len - 1 + TPB) / TPB);
-    dtype **outs = (dtype**)graph;
-    int offset = 2 * count * sizeof(dtype*);
-    dtype **ins = (dtype**)((char*)graph + offset);
-    offset += 2 * count * in_count * sizeof(dtype*);
-    int64_t *in_dims = (int64_t*)((char*)graph + offset);
-    KernelConcatForward<<<block_count, TPB>>>(ins, in_dims, outs, on_training,
-            drop_mask, drop_factor, count, in_count, out_dim);
+    NumberPointerArray in_val_arr, val_arr;
+    in_val_arr.init((dtype**)in_vals.data(), in_vals.size());
+    val_arr.init((dtype**)vals.data(), vals.size());
+    IntArray in_dim_arr;
+    in_dim_arr.init((int*)in_dims.data(), in_dims.size());
+
+    KernelConcatForward<<<block_count, TPB>>>(in_val_arr.value,
+            in_dim_arr.value, val_arr.value, on_training, drop_mask,
+            drop_factor, count, in_count, out_dim);
 }
 
 __global__ void KernelConcatBackward(dtype** in_losses, int64_t *in_dims,

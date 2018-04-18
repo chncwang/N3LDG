@@ -528,8 +528,15 @@ void AddLtyToParamBiasAndAddLxToInputLossesForBiBackward(const dtype *lty,
         int in_dim2);
 void CalculateDropoutMask(dtype dropout_ratio, int count, int dim,
         dtype *mask);
-void ConcatForward(const void *graph, bool on_training, const dtype *drop_mask,
-        dtype drop_factor, int count, int in_count, int out_dim);
+void ConcatForward(const std::vector<dtype*> &in_vals,
+        const std::vector<int> &in_dims,
+        const std::vector<dtype*> &vals,
+        bool on_training,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        int count,
+        int in_count,
+        int out_dim);
 void ConcatBackward(const void *graph, const dtype *drop_mask,
         dtype drop_factor, int count, int in_count, int out_dim);
 void LookupForward(const std::vector<int> &xids, const dtype *vocabulary,

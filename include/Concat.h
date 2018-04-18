@@ -164,8 +164,21 @@ class ConcatExecute : public Execute {
         int count = batch.size();
         drop_mask.init(outDim, count);
         CalculateDropMask(count, outDim, drop_mask);
-        n3ldg_cuda::ConcatForward(graph_info, bTrain, drop_mask.value,
-            dynamicDropValue(), count, inCount, outDim);
+
+        std::vector<dtype*> in_vals, vals;
+        in_vals.reserve(inCount * count);
+        vals.reserve(count);
+        for (Node *node : batch) {
+            ConcatNode *concat = static_cast<ConcatNode*>(node);
+            for (Node *in : concat->ins) {
+                in_vals.push_back(in->val.value);
+            }
+            vals.push_back(node->val.value);
+        }
+
+        n3ldg_cuda::ConcatForward(in_vals,
+                static_cast<ConcatNode*>(batch.at(0))->inDims, vals, bTrain,
+                drop_mask.value, dynamicDropValue(), count, inCount, outDim);
 #if TEST_CUDA
         if (initialDropValue() > 0) {
             drop_mask.copyFromDeviceToHost();
