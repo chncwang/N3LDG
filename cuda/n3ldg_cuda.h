@@ -572,8 +572,11 @@ void PoolForward(PoolingEnum pooling, const std::vector<dtype*> &in_vals,
         const std::vector<int> &in_counts,
         int dim,
         int *hit_inputs);
-void PoolBackward(const void *graph,
-        const std::vector<int> &in_counts, const int *hit_inputs, int count,
+void PoolBackward(const std::vector<dtype*> &losses,
+        std::vector<dtype*> &in_losses,
+        const std::vector<int> &in_counts,
+        const int *hit_inputs,
+        int count,
         int dim);
 void SumPoolForward(PoolingEnum pooling, const std::vector<dtype*> &in_vals,
         int count,

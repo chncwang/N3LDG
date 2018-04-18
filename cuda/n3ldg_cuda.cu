@@ -1705,22 +1705,24 @@ __global__ void KernelPoolBackward(const dtype ** losses,
     }
 }
 
-void PoolBackward(const void *graph,
-        const std::vector<int> &in_counts, const int *hit_inputs, int count,
+void PoolBackward(const std::vector<dtype*> &losses,
+        std::vector<dtype*> &in_losses,
+        const std::vector<int> &in_counts,
+        const int *hit_inputs,
+        int count,
         int dim) {
-    graph = (char*)graph + count * sizeof(dtype*);
-    dtype **losses = (dtype**)graph;
+    NumberPointerArray loss_arr, in_loss_arr;
+    loss_arr.init((dtype**)losses.data(), losses.size());
+    in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
     int max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
-    graph = (char*)graph + count * (1 + max_in_count) * sizeof(dtype*);
-    dtype** in_losses = (dtype**)graph;
     int block_count = (count * dim - 1 + TPB) / TPB;
     block_count = std::min(block_count, BLOCK_COUNT);
-    KernelPoolBackward<<<block_count, TPB>>>(const_cast<const dtype**>(losses),
+    KernelPoolBackward<<<block_count, TPB>>>((const dtype**)loss_arr.value,
             hit_inputs,
             max_in_count,
             count,
             dim,
-            in_losses);
+            in_loss_arr.value);
 }
 
 __global__ void KernelSumPoolForward(PoolingEnum pooling,
