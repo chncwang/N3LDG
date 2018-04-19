@@ -166,19 +166,19 @@ class Graph {
     void compute() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
 #if USE_GPU
-        if (host_memory == NULL) {
-            host_memory = n3ldg_cuda::GraphHostAlloc();
-        }
-        if (device_memory == NULL) {
-            device_memory = n3ldg_cuda::Malloc(10000000);
-        }
-        std::vector<std::vector<NodeInfo>> graph_node_info;
-        computeNodeInfo(graph_node_info);
-        std::vector<int> offsets;
-        int actual_size = GraphToMemory(graph_node_info, host_memory, offsets,
-                10000000);
-        n3ldg_cuda::Memcpy(device_memory, host_memory, actual_size,
-                cudaMemcpyHostToDevice);
+        //if (host_memory == NULL) {
+        //    host_memory = n3ldg_cuda::GraphHostAlloc();
+        //}
+        //if (device_memory == NULL) {
+        //    device_memory = n3ldg_cuda::Malloc(10000000);
+        //}
+        //std::vector<std::vector<NodeInfo>> graph_node_info;
+        //computeNodeInfo(graph_node_info);
+        //std::vector<int> offsets;
+        //int actual_size = GraphToMemory(graph_node_info, host_memory, offsets,
+        //        10000000);
+        //n3ldg_cuda::Memcpy(device_memory, host_memory, actual_size,
+        //        cudaMemcpyHostToDevice);
 #endif
         int step = 0;
 
@@ -188,8 +188,8 @@ class Graph {
                 PExecute new_exec = it.second.at(0)->generate(train,
                         drop_factor);
 #if USE_GPU
-                new_exec->graph_info = (char*)device_memory +
-                    offsets.at(step++);
+                //new_exec->graph_info = (char*)device_memory +
+                //    offsets.at(step++);
 #endif
                 new_exec->batch = it.second;
                 cur_execs.push_back(new_exec);
