@@ -275,24 +275,13 @@ class Node {
 
     virtual inline Execute* generate(bool bTrain, dtype cur_drop_factor) = 0;
 
-    virtual bool typeEqual(Node* other) {
-        if (node_type.compare(other->node_type) != 0) {
-            return false;
-        }
-#if USE_GPU
-        if (dim != other->dim) {
-            return false;
-        }
-        if (!isEqual(drop_value, other->drop_value)) {
-            return false;
-        }
-#endif
-        return true;
+    bool typeEqual(Node* other) {
+        return false;
     }
 
-    virtual size_t typeHashCode() const {
-        return std::hash<std::string>{}(node_type) ^ std::hash<int>{}(dim) ^
-            (std::hash<int>{}((int)(10000 * drop_value)) << 1);
+    size_t typeHashCode() const {
+        static size_t hash;
+        return ++hash;
     }
 
   public:
