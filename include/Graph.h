@@ -97,17 +97,21 @@ class Graph {
     }
 
   public:
-    inline void clearValue(const bool& bTrain = false) {
+    void clearValue(const bool& bTrain = false) {
+        for (Node *node : nodes) {
+            PExecute new_exec = node->generate(train,
+                    drop_factor);
+            new_exec->clearValue();
+            delete new_exec;
+        }
+
+
         int count = execs.size();
         for (int idx = 0; idx < count; idx++) {
             delete execs.at(idx);
         }
         execs.clear();
 
-        for (PNode p : nodes) {
-            Execute *e = p->generate(bTrain, -1);
-            e->clearValue();
-        }
         nodes.clear();
         free_nodes.clear();
         finish_nodes.clear();
@@ -134,22 +138,6 @@ class Graph {
     //real executation
     void compute() {
         n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
-#if USE_GPU
-        //if (host_memory == NULL) {
-        //    host_memory = n3ldg_cuda::GraphHostAlloc();
-        //}
-        //if (device_memory == NULL) {
-        //    device_memory = n3ldg_cuda::Malloc(10000000);
-        //}
-        //std::vector<std::vector<NodeInfo>> graph_node_info;
-        //computeNodeInfo(graph_node_info);
-        //std::vector<int> offsets;
-        //int actual_size = GraphToMemory(graph_node_info, host_memory, offsets,
-        //        10000000);
-        //n3ldg_cuda::Memcpy(device_memory, host_memory, actual_size,
-        //        cudaMemcpyHostToDevice);
-#endif
-        int step = 0;
 
         while (Size(free_nodes) > 0) {
             vector<PExecute> cur_execs;
@@ -203,77 +191,6 @@ class Graph {
             abort();
         }
     }
-
-#if USE_GPU
-    void computeNodeInfo(std::vector<std::vector<NodeInfo>> &graph_node_info) const {
-        if (!graph_node_info.empty()) {
-            abort();
-        }
-
-        std::map<void *, int> degree_map;
-        NodeMap copied_free_nodes = free_nodes;
-        std::vector<PNode> copied_finished_nodes = finish_nodes;
-        int free_count = Size(copied_free_nodes);
-
-        while (Size(copied_free_nodes) > 0) {
-            vector<PExecute> cur_execs;
-
-            for (auto it : copied_free_nodes) {
-                PExecute new_exec = it.second.at(0)->generate(train,
-                        drop_factor);
-                new_exec->batch = it.second;
-                cur_execs.push_back(new_exec);
-            }
-
-            for (PExecute e : cur_execs) {
-                std::vector<NodeInfo> node_info_vec;
-                for (PNode p : e->batch) {
-                    NodeInfo info;
-                    p->toNodeInfo(info);
-                    node_info_vec.push_back(info);
-                }
-                graph_node_info.push_back(node_info_vec);
-            }
-
-            for (PExecute e : cur_execs) {
-                delete e;
-            }
-
-            //finished nodes
-            NodeMap new_free_nodes;
-            for (auto vec_it : copied_free_nodes) {
-                for (auto free_node_it : vec_it.second) {
-                    copied_finished_nodes.push_back(free_node_it);
-                    for (auto parent_it : free_node_it->parents) {
-                        DecreaseDegree(degree_map, parent_it);
-                        int degree = GetDegree(degree_map, parent_it);
-                        if (degree < 0) {
-                            abort();
-                        }
-                        if (degree == 0) {
-                            Insert(parent_it, new_free_nodes);
-                        }
-                    }
-                }
-            }
-
-            copied_free_nodes = std::move(new_free_nodes);
-        }
-
-        if (copied_finished_nodes.size() != all_nodes.size()) {
-            int total_node_num = all_nodes.size();
-            int unprocessed = 0;
-            for (int idx = 0; idx < total_node_num; idx++) {
-                PNode curNode = all_nodes.at(idx);
-                if (GetDegree(degree_map, curNode) >= 0) {
-                    curNode->typeEqual(all_nodes.at(0));
-                    unprocessed++;
-                }
-            }
-            abort();
-        }
-    }
-#endif
 };
 
 
