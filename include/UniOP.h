@@ -138,29 +138,6 @@ class UniNode : public Node {
 
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) override {
-        bool result = Node::typeEqual(other);
-        if (!result) return false;
-
-        UniNode* conv_other = (UniNode*)other;
-        if (param != conv_other->param) {
-            return false;
-        }
-        if (activate != conv_other->activate || derivate != conv_other->derivate) {
-            return false;
-        }
-
-        return true;
-    }
-
-    size_t typeHashCode() const override {
-        void *act = reinterpret_cast<void*>(activate);
-        void *de = reinterpret_cast<void*>(derivate);
-        return Node::typeHashCode() ^ ::typeHashCode(param) ^ ::typeHashCode(act) ^
-            (::typeHashCode(de) << 1);
-    }
-
 #if USE_GPU
     void toNodeInfo(NodeInfo &info) const override {
         Node::toNodeInfo(info);
@@ -223,20 +200,6 @@ class LinearUniNode : public Node {
 
   public:
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
-
-    // better to rewrite for deep understanding
-    inline bool typeEqual(PNode other) {
-        bool result = Node::typeEqual(other);
-        if (!result) return false;
-
-        LinearUniNode* conv_other = (LinearUniNode*)other;
-        if (param != conv_other->param) {
-            return false;
-        }
-
-        return true;
-    }
-
 };
 
 
@@ -288,22 +251,6 @@ class LinearNode : public Node {
 
   public:
     PExecute generate(bool bTrain, dtype cur_drop_factor);
-
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) override {
-        bool result = Node::typeEqual(other);
-        if (!result) return false;
-        LinearNode* conv_other = (LinearNode*)other;
-        if (param != conv_other->param) {
-            return false;
-        }
-
-        return true;
-    }
-
-    size_t typeHashCode() const override {
-        return Node::typeHashCode() ^ ::typeHashCode(param);
-    }
 
 #if USE_GPU
     void toNodeInfo(NodeInfo &info) const override {

@@ -150,29 +150,6 @@ class BiNode : public Node {
   public:
     inline PExecute generate(bool bTrain, dtype cur_drop_factor);
 
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) override {
-        bool result = Node::typeEqual(other);
-        if (!result) return false;
-
-        BiNode* conv_other = (BiNode*)other;
-        if (param != conv_other->param) {
-            return false;
-        }
-        if (activate != conv_other->activate || derivate != conv_other->derivate) {
-            return false;
-        }
-
-        return true;
-    }
-
-    size_t typeHashCode() const override {
-        void *act = reinterpret_cast<void*>(activate);
-        void *de = reinterpret_cast<void*>(derivate);
-        return Node::typeHashCode() ^ ::typeHashCode(param) ^
-            ::typeHashCode(act) ^ (::typeHashCode(de) << 1);
-    }
-
 #if USE_GPU
     void toNodeInfo(NodeInfo &info) const override {
         Node::toNodeInfo(info);

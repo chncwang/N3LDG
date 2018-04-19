@@ -267,10 +267,6 @@ class PAddNode : public Node {
         PAddNode *add = static_cast<PAddNode*>(other);
         return ins.size() == add->ins.size();
     }
-
-    size_t typeHashCode() const override {
-        return (std::hash<int>{}(ins.size()) << 1) ^ Node::typeHashCode();
-    }
 };
 
 

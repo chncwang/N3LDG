@@ -101,33 +101,6 @@ public:
 
     PExecute generate(bool bTrain, dtype cur_drop_factor);
 
-    // better to rewrite for deep understanding
-    bool typeEqual(PNode other) {
-        if (!Node::typeEqual(other)) {
-            return false;
-        }
-        ConcatNode *o = static_cast<ConcatNode*>(other);
-        if (inDims.size() != o->inDims.size()) {
-            return false;
-        }
-        for (int i = 0; i < inDims.size(); ++i) {
-            if (inDims.at(i) != o->inDims.at(i)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    size_t typeHashCode() const override {
-        size_t hash_code = Node::typeHashCode() ^
-            std::hash<int>{}(inDims.size());
-        int i = 0;
-        for (int dim : inDims) {
-            hash_code ^= (dim << (i++ % 16));
-        }
-        return hash_code;
-    }
-
     void compute() {
         int nSize = ins.size();
         int offset = 0;

@@ -276,12 +276,11 @@ class Node {
     virtual inline Execute* generate(bool bTrain, dtype cur_drop_factor) = 0;
 
     bool typeEqual(Node* other) {
-        return false;
+        return this == other;
     }
 
     size_t typeHashCode() const {
-        static size_t hash;
-        return ++hash;
+        return ::typeHashCode(this);
     }
 
   public:

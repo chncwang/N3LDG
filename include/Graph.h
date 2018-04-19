@@ -48,23 +48,12 @@ struct SelfHash {
 
 typedef std::unordered_map<size_t, vector<PNode>, SelfHash> NodeMap;
 
-void Insert(const PNode node, NodeMap& node_map) {
-    size_t x_hash = node->typeHashCode();
-    auto it = node_map.find(x_hash);
-    if (it == node_map.end()) {
-        std::vector<PNode> v = {node};
-        node_map.insert(std::make_pair<size_t, std::vector<PNode>>(std::move(x_hash), std::move(v)));
-    } else {
-        it->second.push_back(node);
-    }
+void Insert(const PNode node, vector<PNode>& free_nodes) {
+    free_nodes.push_back(node);
 }
 
-int Size(const NodeMap &map) {
-    int sum = 0;
-    for (auto it : map) {
-        sum += it.second.size();
-    }
-    return sum;
+int Size(const vector<PNode> &vec) {
+    return vec.size();
 }
 
 // one Node means a vector
@@ -73,7 +62,7 @@ class Graph {
   protected:
     vector<PExecute> execs; //backward
     vector<PNode> nodes; //forward
-    NodeMap free_nodes;
+    vector<PNode> free_nodes;
     vector<PNode> finish_nodes;
     vector<PNode> all_nodes;
 
@@ -115,30 +104,10 @@ class Graph {
         }
         execs.clear();
 
-        std::set<PNode> uncleared_nodes;
         for (PNode p : nodes) {
-            uncleared_nodes.insert(p);
+            Execute *e = p->generate(bTrain, -1);
+            e->clearValue();
         }
-        while (!uncleared_nodes.empty()) {
-            PNode p = NULL;
-            PExecute cur_exec;
-            for (PNode pp : nodes) {
-                auto find = uncleared_nodes.find(pp);
-                if (p == NULL && find != uncleared_nodes.end()) {
-                    p = pp;
-                    cur_exec = p->generate(bTrain, -1);
-                    cur_exec->addNode(*find);
-                    uncleared_nodes.erase(find);
-                } else if (p != NULL && find != uncleared_nodes.end()) {
-                    if (p->typeEqual(*find)) {
-                        cur_exec->addNode(*find);
-                        uncleared_nodes.erase(find);
-                    }
-                }
-            }
-            cur_exec->clearValue();
-        }
-
         nodes.clear();
         free_nodes.clear();
         finish_nodes.clear();
@@ -185,13 +154,11 @@ class Graph {
         while (Size(free_nodes) > 0) {
             vector<PExecute> cur_execs;
             for (auto it : free_nodes) {
-                PExecute new_exec = it.second.at(0)->generate(train,
-                        drop_factor);
+                PExecute new_exec = it->generate(train, drop_factor);
 #if USE_GPU
                 //new_exec->graph_info = (char*)device_memory +
                 //    offsets.at(step++);
 #endif
-                new_exec->batch = it.second;
                 cur_execs.push_back(new_exec);
             }
 
@@ -203,18 +170,16 @@ class Graph {
             }
 
             //finished nodes
-            NodeMap new_free_nodes;
-            for (auto vec_it : free_nodes) {
-                for (auto free_node_it : vec_it.second) {
-                    finish_nodes.push_back(free_node_it);
-                    for (auto parent_it : free_node_it->parents) {
-                        if (parent_it->degree <= 0) {
-                            abort();
-                        }
-                        parent_it->degree--;
-                        if (parent_it->degree == 0) {
-                            Insert(parent_it, new_free_nodes);
-                        }
+            std::vector<PNode> new_free_nodes;
+            for (auto free_node_it : free_nodes) {
+                finish_nodes.push_back(free_node_it);
+                for (auto parent_it : free_node_it->parents) {
+                    if (parent_it->degree <= 0) {
+                        abort();
+                    }
+                    parent_it->degree--;
+                    if (parent_it->degree == 0) {
+                        Insert(parent_it, new_free_nodes);
                     }
                 }
             }
