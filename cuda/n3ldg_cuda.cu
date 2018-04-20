@@ -499,6 +499,8 @@ void EndCuda() {
     Profiler::Ins().Print();
 }
 
+Profiler &profiler = Profiler::Ins();
+
 __global__ void KernelCopyFromOneVectorToMultiVectors(const dtype *src,
         dtype **dest, int count, int len) {
     int index = DeviceDefaultIndex();
@@ -517,8 +519,10 @@ void CopyFromOneVectorToMultiVals(const dtype *src, std::vector<dtype*> &vals,
     val_arr.init((dtype**)vals.data(), vals.size());
     int block_count = (len * count - 1 + TPB) / TPB;
     block_count = std::min(block_count, BLOCK_COUNT);
+    profiler.BeginEvent("kernel");
     KernelCopyFromOneVectorToMultiVectors<<<block_count, TPB>>>(src,
             val_arr.value, count, len);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelActivated(ActivatedEnum activated, const dtype *src,
@@ -579,8 +583,10 @@ void Activated(ActivatedEnum activated, const dtype *src,
     NumberPointerArray dest_arr;
     dest_arr.init((dtype**)dest.data(), dest.size());
     int block_count = std::min((len * count - 1 + TPB) / TPB, BLOCK_COUNT);
+    profiler.BeginEvent("kernel");
     KernelActivated<<<block_count, TPB>>>(activated, src, dest_arr.value,
             dest2, count, len, is_being_trained, drop_factor, drop_mask);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelTanhForward(ActivatedEnum activated, const dtype** xs,
@@ -621,9 +627,11 @@ void TanhForward(ActivatedEnum activated, const std::vector<dtype*> &xs,
     x_arr.init((dtype**)xs.data(), xs.size());
     y_arr.init((dtype**)ys.data(), ys.size());
     int block_count = DefaultBlockCount(count * dim);
+    profiler.BeginEvent("kernel");
     KernelTanhForward<<<block_count, TPB>>>(activated,
             (const dtype**)x_arr.value, count, dim, drop_mask, drop_factor,
             y_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelTanhBackward(ActivatedEnum activated,
@@ -668,9 +676,11 @@ void TanhBackward(ActivatedEnum activated, const std::vector<dtype*> &losses,
     val_arr.init((dtype**)vals.data(), vals.size());
     in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
     int block_count = DefaultBlockCount(count * dim);
+    profiler.BeginEvent("kernel");
     KernelTanhBackward<<<block_count, TPB>>>(activated ,(const dtype**)loss_arr.value,
             (const dtype**)val_arr.value, count, dim, drop_mask, drop_factor,
             in_loss_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelDropoutForward(const dtype** xs, int count, int dim,
@@ -701,8 +711,10 @@ void DropoutForward(const std::vector<dtype*> &xs, int count, int dim,
     x_arr.init((dtype**)xs.data(), xs.size());
     y_arr.init((dtype**)ys.data(), ys.size());
     int block_count = DefaultBlockCount(count * dim);
+    profiler.BeginEvent("kernel");
     KernelDropoutForward<<<block_count, TPB>>>((const dtype**)x_arr.value,
             count, dim, drop_mask, drop_factor, y_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelDropoutBackward(const dtype **losses, const dtype **vals,
@@ -737,9 +749,11 @@ void DropoutBackward(const std::vector<dtype*> &losses,
     val_arr.init((dtype**)vals.data(), vals.size());
     in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
     int block_count = DefaultBlockCount(count * dim);
+    profiler.BeginEvent("kernel");
     KernelDropoutBackward<<<block_count, TPB>>>((const dtype**)loss_arr.value,
             (const dtype**)val_arr.value, count, dim, drop_mask, drop_factor,
             in_loss_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelCopyForUniNodeForward(const dtype** xs, const dtype* b,
@@ -777,9 +791,11 @@ void CopyForUniNodeForward(const std::vector<dtype*> &xs, const dtype* b,
     x_arr.init((dtype**)xs.data(), xs.size());
     int len = x_len + b_len;
     int block_count = std::min((count * len - 1 + TPB) / TPB, 56);
+    profiler.BeginEvent("kernel");
     KernelCopyForUniNodeForward<<<block_count, TPB>>>(
             (const dtype**)x_arr.value, (const dtype*)b, xs_dest, b_dest,
             count, x_len, b_len, use_b);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelCopyForBiNodeForward(const dtype **x1s,
@@ -833,6 +849,7 @@ void CopyForBiNodeForward(const std::vector<dtype*>& x1s,
     NumberPointerArray x1_arr, x2_arr;
     x1_arr.init((dtype**)x1s.data(), x1s.size());
     x2_arr.init((dtype**)x2s.data(), x2s.size());
+    profiler.BeginEvent("kernel");
     KernelCopyForBiNodeForward<<<block_count, TPB>>>(
             (const dtype**)x1_arr.value,
             (const dtype**)x2_arr.value,
@@ -844,6 +861,7 @@ void CopyForBiNodeForward(const std::vector<dtype*>& x1s,
             x1_len,
             x2_len,
             b_len);
+    profiler.EndCudaEvent();
 }
 
 void MatrixMultiplyMatrix(dtype *W, dtype *x, dtype *y, int row, int col,
@@ -896,7 +914,9 @@ bool Verify(dtype *host, dtype *device, int len, const char* message) {
     CallCuda(MemoryPool::Ins().Malloc((void**)&dev_success, 8 * sizeof(bool)));
     CallCuda(MyCudaMemcpy(dev_success, &success, sizeof(bool),
                 cudaMemcpyHostToDevice));
+    profiler.BeginEvent("kernel");
     KernelVerify<<<block_count, TPB>>>(arr.value, device, len, m, dev_success);
+    profiler.EndCudaEvent();
     CallCuda(MyCudaMemcpy(&success, dev_success, sizeof(bool),
                 cudaMemcpyDeviceToHost));
     MemoryPool::Ins().Free(dev_success);
@@ -1097,8 +1117,10 @@ void CalculateLtyForUniBackward(ActivatedEnum activated,
     NumberPointerArray ly_arr;
     ly_arr.init((dtype**)ly.data(), ly.size());
     int block_count = std::min(BLOCK_COUNT, (count * dim + TPB - 1) / TPB);
+    profiler.BeginEvent("kernel");
     KernelCalculateLtyForUniBackward<<<block_count, TPB>>>(activated,
             ly_arr.value, ty, y, drop_mask, drop_factor, lty, count, dim);
+    profiler.EndCudaEvent();
     cudaDeviceSynchronize();
 }
 
@@ -1119,8 +1141,10 @@ void CalculateLyForLinearBackward(const std::vector<dtype*> &ly_vec, dtype *ly,
     NumberPointerArray ly_arr;
     ly_arr.init((dtype**)ly_vec.data(), ly_vec.size());
     int block_count = std::min(BLOCK_COUNT, (count * dim + TPB - 1) / TPB);
+    profiler.BeginEvent("kernel");
     KernelCalculateLyForLinearBackward<<<block_count,
         TPB>>>(ly_arr.value, ly, count, dim);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelAddLtyToParamBiasAndAddLxToInputLossesForUniBackward(
@@ -1187,9 +1211,11 @@ void AddLtyToParamBiasAndAddLxToInputLossesForUniBackward(const dtype *lty,
     block_sums.init(block_y * out_dim);
     IntArray global_block_count_arr;
     global_block_count_arr.init(out_dim);
+    profiler.BeginEvent("kernel");
     KernelAddLtyToParamBiasAndAddLxToInputLossesForUniBackward<<<block_dim,
         TPB>>>(lty, lx, b, loss_arr.value, count, out_dim, in_dim,
                 block_sums.value, global_block_count_arr.value, use_b);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelAddLtyToParamBiasAndAddLxToInputLossesForBiBackward(
@@ -1269,10 +1295,12 @@ void AddLtyToParamBiasAndAddLxToInputLossesForBiBackward(const dtype *lty,
     block_sums.init(block_y * out_dim);
     IntArray global_block_count_arr;
     global_block_count_arr.init(out_dim);
+    profiler.BeginEvent("kernel");
     KernelAddLtyToParamBiasAndAddLxToInputLossesForBiBackward<<<block_dim,
         TPB>>>(lty, lx1, lx2, b, loss1_arr.value, loss2_arr.value, count,
                 out_dim, in_dim1, in_dim2, block_sums.value,
                 global_block_count_arr.value);
+    profiler.EndCudaEvent();
 }
 
 constexpr int MAX_BATCH_COUNT = 1000000;
@@ -1291,7 +1319,9 @@ curandState_t *GetCurandStates() {
         MemoryPool &pool = MemoryPool::Ins();
         CallCuda(pool.Malloc((void**)&states, sizeof(curandState_t) *
                     MAX_BATCH_COUNT));
+        profiler.BeginEvent("kernel");
         KernelInitCurandStates<<<BLOCK_COUNT, TPB>>>( states);
+        profiler.EndCudaEvent();
     }
     return states;
 }
@@ -1386,9 +1416,11 @@ void ConcatForward(const std::vector<dtype*> &in_vals,
     IntArray in_dim_arr;
     in_dim_arr.init((int*)in_dims.data(), in_dims.size());
 
+    profiler.BeginEvent("kernel");
     KernelConcatForward<<<block_count, TPB>>>(in_val_arr.value,
             in_dim_arr.value, val_arr.value, on_training, drop_mask,
             drop_factor, count, in_count, out_dim);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelConcatBackward(dtype** in_losses, int *in_dims,
@@ -1445,9 +1477,11 @@ void ConcatBackward(const std::vector<dtype*> &in_losses,
     IntArray in_dim_arr;
     in_dim_arr.init((int*)in_dims.data(), in_dims.size());
 
+    profiler.BeginEvent("kernel");
     KernelConcatBackward<<<block_count, TPB>>>(in_loss_arr.value,
             in_dim_arr.value, loss_arr.value, drop_mask, drop_factor, count,
             in_count, out_dim);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelMemset(dtype *p, int len, dtype value) {
@@ -1460,7 +1494,9 @@ __global__ void KernelMemset(dtype *p, int len, dtype value) {
 
 void Memset(dtype *p, int len, dtype value) {
     int block_count = std::min(BLOCK_COUNT, (len - 1 + TPB) / TPB);
+    profiler.BeginEvent("kernel");
     KernelMemset<<<block_count, TPB>>>(p, len, value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelMemset(bool *p, int len, bool value) {
@@ -1473,7 +1509,9 @@ __global__ void KernelMemset(bool *p, int len, bool value) {
 
 void Memset(bool *p, int len, bool value) {
     int block_count = std::min(BLOCK_COUNT, (len - 1 + TPB) / TPB);
+    profiler.BeginEvent("kernel");
     KernelMemset<<<block_count, TPB>>>(p, len, value);
+    profiler.EndCudaEvent();
 }
 
 void *Malloc(int size) {
@@ -1502,7 +1540,9 @@ void BatchMemset(const std::vector<dtype*> &vec, int count, int dim,
     block_count = std::min(block_count, BLOCK_COUNT);
     NumberPointerArray vec_arr;
     vec_arr.init((dtype**)vec.data(), vec.size());
+    profiler.BeginEvent("kernel");
     KernelBatchMemset<<<block_count, TPB>>>(vec_arr.value, count, dim, value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelLookupForward(const int *xids, const dtype *vocabulary,
@@ -1557,9 +1597,11 @@ void LookupForward(const std::vector<int> &xids, const dtype *vocabulary,
     xid_arr.init((int*)xids.data(), xids.size());
     NumberPointerArray val_arr;
     val_arr.init((dtype**)vals.data(), vals.size());
+    profiler.BeginEvent("kernel");
     KernelLookupForward<<<block_count, TPB>>>(xid_arr.value, vocabulary,
             on_training, drop_mask, drop_factor,  count, dim,
             const_cast<dtype**>(val_arr.value));
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelLookupBackward(const int *xids, int unknown_id,
@@ -1608,6 +1650,8 @@ void LookupBackward(const std::vector<int> &xids, int unknown_id,
     xid_arr.init((int*)pl_arr.value, xids.size());
     NumberPointerArray loss_arr;
     loss_arr.init((dtype**)losses.data(), losses.size());
+
+    profiler.BeginEvent("kernel");
     KernelLookupBackward<<<block_count, TPB>>>(
             const_cast<const int *>(xid_arr.value),
             unknown_id,
@@ -1619,6 +1663,7 @@ void LookupBackward(const std::vector<int> &xids, int unknown_id,
             dim,
             grad,
             indexers);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelPoolForward(PoolingEnum pooling, dtype **ins,
@@ -1684,9 +1729,11 @@ void PoolForward(PoolingEnum pooling, const std::vector<dtype*> &in_vals,
     IntArray in_count_arr;
     in_count_arr.init((int*)in_counts.data(), in_counts.size());
 
+    profiler.BeginEvent("kernel");
     KernelPoolForward<<<block_dim, thread_count, thread_count * 2 *
         sizeof(dtype)>>>(pooling, in_val_arr.value, in_count_arr.value,
                 max_in_count, val_arr.value, count, dim, hit_inputs);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelPoolBackward(const dtype ** losses,
@@ -1719,12 +1766,14 @@ void PoolBackward(const std::vector<dtype*> &losses,
     int max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
     int block_count = (count * dim - 1 + TPB) / TPB;
     block_count = std::min(block_count, BLOCK_COUNT);
+    profiler.BeginEvent("kernel");
     KernelPoolBackward<<<block_count, TPB>>>((const dtype**)loss_arr.value,
             hit_inputs,
             max_in_count,
             count,
             dim,
             in_loss_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelSumPoolForward(PoolingEnum pooling,
@@ -1779,10 +1828,12 @@ void SumPoolForward(PoolingEnum pooling, const std::vector<dtype*> &in_vals,
     NumberPointerArray val_arr;
     val_arr.init((dtype**)vals.data(), vals.size());
 
+    profiler.BeginEvent("kernel");
     KernelSumPoolForward<<<block_dim, thread_count,
         thread_count * sizeof(dtype)>>>(pooling,
                 (const dtype**)in_val_arr.value, count, dim,
                 (const int*)in_count_arr.value, max_in_count, val_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelSumBackward(PoolingEnum pooling, const dtype **losses,
@@ -1818,9 +1869,11 @@ void SumPoolBackward(PoolingEnum pooling, const std::vector<dtype*> &losses,
     in_count_arr.init((int*)in_counts.data(), in_counts.size());
     NumberPointerArray in_loss_arr;
     in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
+    profiler.BeginEvent("kernel");
     KernelSumBackward<<<block_dim, thread_count>>>(pooling,
             (const dtype**)loss_arr.value, (const int*)in_count_arr.value,
             max_in_count, count, dim, in_loss_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelScalarAttentionForward(const dtype** ins,
@@ -1896,11 +1949,13 @@ void ScalarAttentionForward(const std::vector<dtype*> &ins,
     IntArray in_count_arr;
     in_count_arr.init((int*)in_counts.data(), in_counts.size());
 
+    profiler.BeginEvent("kernel");
     KernelScalarAttentionForward<<<block_dim, thread_count, 2 * thread_count *
         sizeof(dtype)>>>((const dtype**)in_arr.value,
                 (const dtype**)unnormed_arr.value,
                 (const int*)in_count_arr.value,
                 max_in_count, count, dim, mask_arr.value, val_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelScalarAttentionMaskAndInLoss(const dtype **losses,
@@ -1961,9 +2016,11 @@ void ScalarAttentionMaskAndInLoss(const dtype** losses,
             thread_count <<= 1;
         }
     }
+    profiler.BeginEvent("kernel");
     KernelScalarAttentionMaskAndInLoss<<<block_dim, thread_count,
         thread_count * sizeof(dtype)>>>(losses, in_vals, masks, in_counts,
                 max_in_count, count, dim, mask_losses, in_losses);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelScalarAttentionBackward(const dtype** masks,
@@ -2030,11 +2087,13 @@ void ScalarAttentionBackward(const std::vector<dtype*> &losses,
     while (thread_count < max_in_count) {
         thread_count <<= 1;
     }
+    profiler.BeginEvent("kernel");
     KernelScalarAttentionBackward<<<block_dim, thread_count,
         thread_count * sizeof(dtype)>>>((const dtype**)mask_arr.value,
                 (const dtype*)mask_loss_arr.value,
                 (const int*)in_count_arr.value, max_in_count, count, dim,
                 unnormed_loss_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelVectorAttentionForward(const dtype** ins,
@@ -2110,11 +2169,13 @@ void VectorAttentionForward(const std::vector<dtype*> &ins,
     IntArray in_count_arr;
     in_count_arr.init((int*)in_counts.data(), in_counts.size());
 
+    profiler.BeginEvent("kernel");
     KernelVectorAttentionForward<<<block_dim, thread_count, 2 * thread_count *
         sizeof(dtype)>>>((const dtype**)in_arr.value,
                 (const dtype**)unnormed_arr.value,
                 (const int*)in_count_arr.value,
                 max_in_count, count, dim, mask_arr.value, val_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelVectorAttentionMaskAndInLoss(const dtype **losses,
@@ -2298,9 +2359,11 @@ void PMultiForward(const std::vector<dtype*> &ins1,
     if (dropout < 0) {
         dropout = 0;
     }
+    profiler.BeginEvent("kernel");
     KernelPMultiForward<<<block_count, TPB>>>((const dtype**)ins1_arr.value,
             (const dtype**)ins2_arr.value, count, dim, on_training,drop_mask,
             dropout, vals_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelPMultiBackward(const dtype **losses,
@@ -2345,10 +2408,12 @@ void PMultiBackward(const std::vector<dtype*> &losses,
     in_vals2_arr.init((dtype**)in_vals2.data(), in_vals2.size());
     in_losses1_arr.init((dtype**)in_losses1.data(), in_losses1.size());
     in_losses2_arr.init((dtype**)in_losses2.data(), in_losses2.size());
+    profiler.BeginEvent("kernel");
     KernelPMultiBackward<<<block_count, TPB>>>((const dtype**)losses_arr.value,
             (const dtype**)in_vals1_arr.value,
             (const dtype**)in_vals2_arr.value, count, dim, drop_mask,
             drop_factor, in_losses1_arr.value, in_losses2_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelPAddForward(const dtype*** ins, int count, int dim,
@@ -2401,8 +2466,10 @@ void PAddForward(const std::vector<std::vector<dtype*>> &ins, int count,
     out_arr.init(vals.data(), vals.size());
 
     int block_count = DefaultBlockCount(count * dim);
+    profiler.BeginEvent("kernel");
     KernelPAddForward<<<block_count, TPB>>>((const dtype***)in_arr.value,
             count, dim, in_count, drop_mask, drop_factor, out_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelPAddBackward(const dtype **losses, int count, int dim,
@@ -2452,8 +2519,10 @@ void PAddBackward(const std::vector<dtype*> &losses, int count, int dim,
     out_loss_arr.init((dtype**)losses.data(), losses.size());
 
     int block_count = DefaultBlockCount(in_count * count * dim);
+    profiler.BeginEvent("kernel");
     KernelPAddBackward<<<block_count, TPB>>>((const dtype**)out_loss_arr.value,
             count, dim, in_count, drop_mask, drop_factor, in_loss_arr.value);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelSoftMaxLoss(const dtype **vals, dtype **losses,
@@ -2525,6 +2594,7 @@ void SoftMaxLoss(const std::vector<dtype*> &vals, std::vector<dtype*> &losses,
     loss_arr.init((dtype**)losses.data(), losses.size());
     IntArray answer_arr;
     answer_arr.init((int*)answers.data(), answers.size());
+    profiler.BeginEvent("kernel");
     KernelSoftMaxLoss<<<count, thread_count>>>(
             const_cast<const dtype **>(val_arr.value),
             const_cast<dtype **>(loss_arr.value),
@@ -2533,6 +2603,7 @@ void SoftMaxLoss(const std::vector<dtype*> &vals, std::vector<dtype*> &losses,
             batchsize,
             count,
             dim);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelSquareSum(const dtype *v, int len, dtype *global_sum,
@@ -2597,8 +2668,10 @@ dtype SquareSum(const dtype *v, int len) {
     block_counter.init();
     DeviceNumber result;
     result.init();
+    profiler.BeginEvent("kernel");
     KernelSquareSum<<<block_count, TPB>>>(v, len,
             global_sum.value, block_counter.value, result.value);
+    profiler.EndCudaEvent();
     result.copyFromDeviceToHost();
     return result.v;
 }
@@ -2671,8 +2744,10 @@ dtype SquareSum(const dtype *v, const bool *indexers, int count, int dim) {
     block_counter.init();
     DeviceNumber result;
     result.init();
+    profiler.BeginEvent("kernel");
     KernelSquareSum<<<block_count, TPB>>>(v, indexers,
             count, dim, global_sum.value, block_counter.value, result.value);
+    profiler.EndCudaEvent();
     result.copyFromDeviceToHost();
     return result.v;
 }
@@ -2687,7 +2762,9 @@ __global__ void KernelRescale(dtype *v, int len, dtype scale) {
 
 void Rescale(dtype *v, int len, dtype scale) {
     int block_count = DefaultBlockCount(len);
+    profiler.BeginEvent("kernel");
     KernelRescale<<<block_count, TPB>>>(v, len, scale);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelUpdateAdam(dtype *val, dtype *grad, int row, int col,
@@ -2726,6 +2803,7 @@ void UpdateAdam(dtype *val, dtype *grad, int row, int col, dtype *aux_mean,
         dtype eps) {
     int block_count = DefaultBlockCount(row * col);
     dtype x = 1.0f / (1 - pow(belta1, iter + 1));
+    profiler.BeginEvent("kernel");
     KernelUpdateAdam<<<block_count, TPB>>>(val, grad, row, col, aux_mean,
             aux_square,
             iter,
@@ -2735,6 +2813,7 @@ void UpdateAdam(dtype *val, dtype *grad, int row, int col, dtype *aux_mean,
             reg,
             eps,
             x);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelUpdateAdam(dtype *val, dtype *grad, int row, int col,
@@ -2789,10 +2868,14 @@ void UpdateAdam(dtype *val, dtype *grad, int row, int col, dtype *aux_mean,
         dtype reg,
         dtype eps) {
     int block_count = DefaultBlockCount(row * col);
+    profiler.BeginEvent("kernel");
     KernelUpdateAdam<<<block_count, TPB>>>(val, grad, row, col, aux_mean,
             aux_square, indexers, iters, belta1, belta2, alpha, reg, eps);
+    profiler.EndCudaEvent();
     block_count = DefaultBlockCount(row);
+    profiler.BeginEvent("kernel");
     KernelSelfPlusIters<<<block_count, TPB>>>(indexers, iters, row);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelUpdateAdagrad(dtype *val, dtype *grad, int row, int col,
@@ -2818,8 +2901,10 @@ void UpdateAdagrad(dtype *val, dtype *grad, int row, int col,
         dtype reg,
         dtype eps) {
     int block_count = DefaultBlockCount(row * col);
+    profiler.BeginEvent("kernel");
     KernelUpdateAdagrad<<<block_count, TPB>>>(val, grad, row, col, aux_square,
             alpha, reg, eps);
+    profiler.EndCudaEvent();
 }
 
 __global__ void KernelUpdateAdagrad(dtype *val, dtype *grad, int row, int col,
@@ -2850,8 +2935,10 @@ void UpdateAdagrad(dtype *val, dtype *grad, int row, int col,
         dtype reg,
         dtype eps) {
     int block_count = DefaultBlockCount(row * col);
+    profiler.BeginEvent("kernel");
     KernelUpdateAdagrad<<<block_count, TPB>>>(val, grad, row, col, aux_square,
             indexers, alpha, reg, eps);
+    profiler.EndCudaEvent();
 }
 
 void *GraphHostAlloc() {
