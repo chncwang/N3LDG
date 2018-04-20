@@ -324,7 +324,8 @@ class UniExecute :public Execute {
     dtype(*derivate)(const dtype&, const dtype&);  // derivation function of activation function
     Tensor2D drop_mask;
 
-    inline void  forward() {
+    void  forward() {
+        n3ldg_cuda::Profiler &profiler = n3ldg_cuda::Profiler::Ins();
         int count = batch.size();
         ty.init(outDim, count);
         x.init(inDim, count);
