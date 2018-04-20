@@ -85,10 +85,7 @@ cublasHandle_t& GetCublasHandle() {
 
 cudaError_t MyCudaMemcpy(void *dest, const void *src, size_t count,
         cudaMemcpyKind kind) {
-    Profiler &profiler = Profiler::Ins();
-    profiler.BeginEvent("cudaMemcpy");
     cudaError_t e = cudaMemcpy(dest, src, count, kind);
-    profiler.EndEvent();
     return e;
 }
 
@@ -491,7 +488,7 @@ void InitCuda() {
     device.device = 1;
     cnmemInit(1, &device, CNMEM_FLAGS_DEFAULT);
 #else
-    CallCuda(cudaSetDevice(1));
+    CallCuda(cudaSetDevice(0));
 #endif
     CallCuda(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
     CallCuda(cudaPrintfInit());
@@ -513,13 +510,15 @@ __global__ void KernelCopyFromOneVectorToMultiVectors(const dtype *src,
     }
 }
 
-void CopyFromOneVectorToMultiVals(const void *graph, const dtype *src,
-        int count, int len) {
-    dtype **vals = (dtype**)graph;
+void CopyFromOneVectorToMultiVals(const dtype *src, std::vector<dtype*> &vals,
+        int count,
+        int len) {
+    NumberPointerArray val_arr;
+    val_arr.init((dtype**)vals.data(), vals.size());
     int block_count = (len * count - 1 + TPB) / TPB;
     block_count = std::min(block_count, BLOCK_COUNT);
-    KernelCopyFromOneVectorToMultiVectors<<<block_count, TPB>>>(src, vals,
-            count, len);
+    KernelCopyFromOneVectorToMultiVectors<<<block_count, TPB>>>(src,
+            val_arr.value, count, len);
 }
 
 __global__ void KernelActivated(ActivatedEnum activated, const dtype *src,
@@ -674,6 +673,75 @@ void TanhBackward(ActivatedEnum activated, const std::vector<dtype*> &losses,
             in_loss_arr.value);
 }
 
+__global__ void KernelDropoutForward(const dtype** xs, int count, int dim,
+        const dtype* drop_mask,
+        dtype drop_factor,
+        dtype**ys) {
+    int index = DeviceDefaultIndex();
+    int step = DeviceDefaultStep();
+    for (int i = index; i < dim * count; i += step) {
+        int count_i = i / dim;
+        int dim_i = i % dim;
+        if (drop_factor > 0.0f && drop_mask[i] < drop_factor) {
+            ys[count_i][dim_i] = 0.0f;
+        } else {
+            ys[count_i][dim_i] = xs[count_i][dim_i];
+        }
+    }
+}
+
+void DropoutForward(const std::vector<dtype*> &xs, int count, int dim,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        std::vector<dtype*> &ys) {
+    if (drop_factor < 0) {
+        drop_factor = 0.0f;
+    }
+    NumberPointerArray x_arr, y_arr;
+    x_arr.init((dtype**)xs.data(), xs.size());
+    y_arr.init((dtype**)ys.data(), ys.size());
+    int block_count = DefaultBlockCount(count * dim);
+    KernelDropoutForward<<<block_count, TPB>>>((const dtype**)x_arr.value,
+            count, dim, drop_mask, drop_factor, y_arr.value);
+}
+
+__global__ void KernelDropoutBackward(const dtype **losses, const dtype **vals,
+        int count,
+        int dim,
+        const dtype* drop_mask,
+        dtype drop_factor,
+        dtype** in_losses) {
+    int index = DeviceDefaultIndex();
+    int step = DeviceDefaultStep();
+    for (int i = index; i < dim * count; i += step) {
+        int count_i = i / dim;
+        int dim_i = i % dim;
+        if (drop_factor <= 0.0f || drop_mask[i] > drop_factor) {
+            atomicAdd(in_losses[count_i] + dim_i, losses[count_i][dim_i]);
+        }
+    }
+}
+
+void DropoutBackward(const std::vector<dtype*> &losses,
+        const std::vector<dtype*> &vals,
+        int count,
+        int dim,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        std::vector<dtype*> &in_losses) {
+    if (drop_factor < 0) {
+        drop_factor = 0.0f;
+    }
+    NumberPointerArray loss_arr, val_arr, in_loss_arr;
+    loss_arr.init((dtype**)losses.data(), losses.size());
+    val_arr.init((dtype**)vals.data(), vals.size());
+    in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
+    int block_count = DefaultBlockCount(count * dim);
+    KernelDropoutBackward<<<block_count, TPB>>>((const dtype**)loss_arr.value,
+            (const dtype**)val_arr.value, count, dim, drop_mask, drop_factor,
+            in_loss_arr.value);
+}
+
 __global__ void KernelCopyForUniNodeForward(const dtype** xs, const dtype* b,
         dtype* xs_dest,
         dtype* b_dest,
@@ -698,18 +766,20 @@ __global__ void KernelCopyForUniNodeForward(const dtype** xs, const dtype* b,
     }
 }
 
-void CopyForUniNodeForward(const void *graph, const dtype* b,
+void CopyForUniNodeForward(const std::vector<dtype*> &xs, const dtype* b,
         dtype* xs_dest,
         dtype* b_dest,
         int count,
         int x_len,
         int b_len,
         bool use_b) {
-    dtype **xs = (dtype**)((char*)graph + 2 * count * sizeof(dtype*));
+    NumberPointerArray x_arr;
+    x_arr.init((dtype**)xs.data(), xs.size());
     int len = x_len + b_len;
     int block_count = std::min((count * len - 1 + TPB) / TPB, 56);
-    KernelCopyForUniNodeForward<<<block_count, TPB>>>((const dtype**)xs,
-            (const dtype*)b, xs_dest, b_dest, count, x_len, b_len, use_b);
+    KernelCopyForUniNodeForward<<<block_count, TPB>>>(
+            (const dtype**)x_arr.value, (const dtype*)b, xs_dest, b_dest,
+            count, x_len, b_len, use_b);
 }
 
 __global__ void KernelCopyForBiNodeForward(const dtype **x1s,
@@ -920,10 +990,9 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
     CallCnmem(cnmemMalloc(p, size, NULL));
     return cudaSuccess;
 #elif DEVICE_MEMORY == 1
-    return cudaMalloc(p, size);
+    cudaError_t r = cudaMalloc(p, size);
+    return r;
 #else
-    Profiler &profiler = Profiler::Ins();
-    profiler.BeginEvent("MemoryPool Malloc");
     int fit_size = 1;
     int n = 0;
     while (fit_size < size) {
@@ -943,19 +1012,17 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
         busy_blocks_.insert(std::make_pair(block.p, block));
         free_blocks_.at(n).resize(this_size - 1);
     }
-    profiler.EndEvent();
     return status;
 #endif
 }
 
 cudaError_t MemoryPool::Free(void *p) {
-    Profiler &profiler = Profiler::Ins();
 #if DEVICE_MEMORY == 0
     CallCnmem(cnmemFree(p, NULL));
 #elif DEVICE_MEMORY == 1
-    return cudaFree(p);
+    cudaError_t r = cudaFree(p);
+    return r;
 #else
-    profiler.BeginEvent("MemoryPool Free");
     auto it = busy_blocks_.find(p);
     if (it == busy_blocks_.end()) {
         abort();
@@ -969,7 +1036,6 @@ cudaError_t MemoryPool::Free(void *p) {
     free_blocks_.at(n).push_back(it->second);
     busy_blocks_.erase(it);
 
-    profiler.EndEvent();
     return cudaSuccess;
 #endif
 }
@@ -1246,7 +1312,7 @@ void CalculateDropoutMask(dtype drop_factor, int count, int dim, dtype* mask) {
     CallCurand(curandGenerateUniform(gen, mask, count * dim));
 }
 
-__global__ void KernelConcatForward(dtype **ins, int64_t *in_dims,
+__global__ void KernelConcatForward(dtype **ins, int *in_dims,
         dtype **outs,
         bool on_training,
         const dtype *drop_mask,
@@ -1299,24 +1365,33 @@ __global__ void KernelConcatForward(dtype **ins, int64_t *in_dims,
     }
 }
 
-void ConcatForward(const void *graph, bool on_training, const dtype *drop_mask,
-        dtype drop_factor, int count, int in_count, int out_dim) {
+void ConcatForward(const std::vector<dtype*> &in_vals,
+        const std::vector<int> &in_dims,
+        std::vector<dtype*> &vals,
+        bool on_training,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        int count,
+        int in_count,
+        int out_dim) {
     assert(drop_factor < 1);
     if (drop_factor < 0) {
         drop_factor = 0;
     }
     int len = count * out_dim;
     int block_count = std::min(BLOCK_COUNT, (len - 1 + TPB) / TPB);
-    dtype **outs = (dtype**)graph;
-    int offset = 2 * count * sizeof(dtype*);
-    dtype **ins = (dtype**)((char*)graph + offset);
-    offset += 2 * count * in_count * sizeof(dtype*);
-    int64_t *in_dims = (int64_t*)((char*)graph + offset);
-    KernelConcatForward<<<block_count, TPB>>>(ins, in_dims, outs, on_training,
-            drop_mask, drop_factor, count, in_count, out_dim);
+    NumberPointerArray in_val_arr, val_arr;
+    in_val_arr.init((dtype**)in_vals.data(), in_vals.size());
+    val_arr.init((dtype**)vals.data(), vals.size());
+    IntArray in_dim_arr;
+    in_dim_arr.init((int*)in_dims.data(), in_dims.size());
+
+    KernelConcatForward<<<block_count, TPB>>>(in_val_arr.value,
+            in_dim_arr.value, val_arr.value, on_training, drop_mask,
+            drop_factor, count, in_count, out_dim);
 }
 
-__global__ void KernelConcatBackward(dtype** in_losses, int64_t *in_dims,
+__global__ void KernelConcatBackward(dtype** in_losses, int *in_dims,
         dtype **out_losses,
         const dtype *drop_mask,
         dtype drop_factor,
@@ -1349,8 +1424,14 @@ __global__ void KernelConcatBackward(dtype** in_losses, int64_t *in_dims,
     }
 }
 
-void ConcatBackward(const void *graph, const dtype *drop_mask,
-        dtype drop_factor, int count, int in_count, int out_dim) {
+void ConcatBackward(const std::vector<dtype*> &in_losses,
+        const std::vector<int> &in_dims,
+        std::vector<dtype*> &losses,
+        const dtype *drop_mask,
+        dtype drop_factor,
+        int count,
+        int in_count,
+        int out_dim) {
     assert(drop_factor < 1);
     if (drop_factor < 0) {
         drop_factor = 0;
@@ -1358,15 +1439,15 @@ void ConcatBackward(const void *graph, const dtype *drop_mask,
     int len = count * out_dim;
     int block_count = std::min(BLOCK_COUNT, (len - 1 + TPB) / TPB);
 
-    graph = (char*)graph + count * sizeof(dtype*);
-    dtype **out_losses = (dtype**)graph;
-    graph = (char*)graph + count * (1 + in_count) * sizeof(dtype*);
-    dtype ** in_losses = (dtype**)graph;
-    graph = (char*)graph + count * in_count * sizeof(dtype*);
-    int64_t *in_dims = (int64_t*)graph;
+    NumberPointerArray in_loss_arr, loss_arr;
+    in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
+    loss_arr.init((dtype**)losses.data(), losses.size());
+    IntArray in_dim_arr;
+    in_dim_arr.init((int*)in_dims.data(), in_dims.size());
 
-    KernelConcatBackward<<<block_count, TPB>>>(in_losses, in_dims, out_losses,
-            drop_mask, drop_factor, count, in_count, out_dim);
+    KernelConcatBackward<<<block_count, TPB>>>(in_loss_arr.value,
+            in_dim_arr.value, loss_arr.value, drop_mask, drop_factor, count,
+            in_count, out_dim);
 }
 
 __global__ void KernelMemset(dtype *p, int len, dtype value) {
@@ -1541,7 +1622,7 @@ void LookupBackward(const std::vector<int> &xids, int unknown_id,
 }
 
 __global__ void KernelPoolForward(PoolingEnum pooling, dtype **ins,
-        int64_t *in_counts, int max_in_count, dtype **outs, int count, int dim,
+        int *in_counts, int max_in_count, dtype **outs, int count, int dim,
         int* hit_inputs) {
     __shared__ volatile extern dtype pool_shared_arr[];
     volatile dtype* shared_indexers = pool_shared_arr + blockDim.x;
@@ -1583,8 +1664,12 @@ __global__ void KernelPoolForward(PoolingEnum pooling, dtype **ins,
     }
 }
 
-void PoolForward(PoolingEnum pooling, const void *graph, int count,
-        const std::vector<int> &in_counts, int dim, int *hit_inputs) {
+void PoolForward(PoolingEnum pooling, const std::vector<dtype*> &in_vals,
+        std::vector<dtype*> &vals,
+        int count,
+        const std::vector<int> &in_counts,
+        int dim,
+        int *hit_inputs) {
     int max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
     int thread_count = 8;
     while (max_in_count > thread_count) {
@@ -1592,14 +1677,16 @@ void PoolForward(PoolingEnum pooling, const void *graph, int count,
     }
     dim3 block_dim(dim, count, 1);
 
-    dtype **outs = (dtype**)graph;
-    graph = (char*)graph + 2 * count * sizeof(dtype*);
-    dtype **ins = (dtype**)graph;
-    graph = (char*)graph + 2 * count * max_in_count * sizeof(dtype*);
-    int64_t *in_counts_device = (int64_t*)graph;
+    NumberPointerArray in_val_arr;
+    in_val_arr.init((dtype**)in_vals.data(), in_vals.size());
+    NumberPointerArray val_arr;
+    val_arr.init((dtype**)vals.data(), vals.size());
+    IntArray in_count_arr;
+    in_count_arr.init((int*)in_counts.data(), in_counts.size());
+
     KernelPoolForward<<<block_dim, thread_count, thread_count * 2 *
-        sizeof(dtype)>>>(pooling, ins, in_counts_device, max_in_count, outs,
-                count, dim, hit_inputs);
+        sizeof(dtype)>>>(pooling, in_val_arr.value, in_count_arr.value,
+                max_in_count, val_arr.value, count, dim, hit_inputs);
 }
 
 __global__ void KernelPoolBackward(const dtype ** losses,
@@ -1620,22 +1707,24 @@ __global__ void KernelPoolBackward(const dtype ** losses,
     }
 }
 
-void PoolBackward(const void *graph,
-        const std::vector<int> &in_counts, const int *hit_inputs, int count,
+void PoolBackward(const std::vector<dtype*> &losses,
+        std::vector<dtype*> &in_losses,
+        const std::vector<int> &in_counts,
+        const int *hit_inputs,
+        int count,
         int dim) {
-    graph = (char*)graph + count * sizeof(dtype*);
-    dtype **losses = (dtype**)graph;
+    NumberPointerArray loss_arr, in_loss_arr;
+    loss_arr.init((dtype**)losses.data(), losses.size());
+    in_loss_arr.init((dtype**)in_losses.data(), in_losses.size());
     int max_in_count = *std::max_element(in_counts.begin(), in_counts.end());
-    graph = (char*)graph + count * (1 + max_in_count) * sizeof(dtype*);
-    dtype** in_losses = (dtype**)graph;
     int block_count = (count * dim - 1 + TPB) / TPB;
     block_count = std::min(block_count, BLOCK_COUNT);
-    KernelPoolBackward<<<block_count, TPB>>>(const_cast<const dtype**>(losses),
+    KernelPoolBackward<<<block_count, TPB>>>((const dtype**)loss_arr.value,
             hit_inputs,
             max_in_count,
             count,
             dim,
-            in_losses);
+            in_loss_arr.value);
 }
 
 __global__ void KernelSumPoolForward(PoolingEnum pooling,
