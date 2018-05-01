@@ -51,7 +51,7 @@ inline dtype loss(PNode x, const vector<dtype> &answer, Metric& eval, int batchs
 }
 
 #if USE_GPU
-dtype loss(const std::vector<PNode> &x, const std::vector<int> &answers,
+dtype softMaxLoss(const std::vector<PNode> &x, const std::vector<int> &answers,
         n3ldg_cuda::DeviceInt &correct,
         int batchsize = 1) {
     std::vector<dtype*> vals, losses;
@@ -68,7 +68,7 @@ dtype loss(const std::vector<PNode> &x, const std::vector<int> &answers,
 #endif
 
 #if USE_GPU
-void predict(PNode x, int &y) {
+void softMaxPredict(PNode x, int &y) {
     y = n3ldg_cuda::Predict(x->va.value, dim);
 }
 #else
