@@ -649,6 +649,7 @@ void SoftMaxLoss(const std::vector<dtype*> &vals, std::vector<dtype*> &losses,
         int batchsize,
         int count,
         int dim);
+int Predict(const dtype* val, int dim);
 dtype SquareSum(const dtype *v, int len);
 dtype SquareSum(const dtype *v, const bool *indexers, int count, int dim);
 void Rescale(dtype *v, int len, dtype scale);

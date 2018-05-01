@@ -485,7 +485,7 @@ void InitCuda() {
 #if DEVICE_MEMORY == 0
     cnmemDevice_t device;
     device.size = 2000000000;
-    device.device = 1;
+    device.device = 0;
     cnmemInit(1, &device, CNMEM_FLAGS_DEFAULT);
 #else
     CallCuda(cudaSetDevice(0));
@@ -986,11 +986,15 @@ bool Verify(int *host, int *device, int len, const char* message) {
 
 cudaError_t MemoryPool::Malloc(void **p, int size) {
     assert(*p == NULL);
+    Profiler &profiler = Profiler::Ins();
+    profiler.BeginEvent("Malloc");
 #if DEVICE_MEMORY == 0
     CallCnmem(cnmemMalloc(p, size, NULL));
+    profiler.EndEvent();
     return cudaSuccess;
 #elif DEVICE_MEMORY == 1
     cudaError_t r = cudaMalloc(p, size);
+    profiler.EndEvent();
     return r;
 #else
     int fit_size = 1;
@@ -1012,15 +1016,20 @@ cudaError_t MemoryPool::Malloc(void **p, int size) {
         busy_blocks_.insert(std::make_pair(block.p, block));
         free_blocks_.at(n).resize(this_size - 1);
     }
+    profiler.EndEvent();
     return status;
 #endif
 }
 
 cudaError_t MemoryPool::Free(void *p) {
+    Profiler &profiler = Profiler::Ins();
+    profiler.BeginEvent("Free");
 #if DEVICE_MEMORY == 0
     CallCnmem(cnmemFree(p, NULL));
+    profiler.EndEvent();
 #elif DEVICE_MEMORY == 1
     cudaError_t r = cudaFree(p);
+    profiler.EndEvent();
     return r;
 #else
     auto it = busy_blocks_.find(p);
@@ -1036,6 +1045,7 @@ cudaError_t MemoryPool::Free(void *p) {
     free_blocks_.at(n).push_back(it->second);
     busy_blocks_.erase(it);
 
+    profiler.EndEvent();
     return cudaSuccess;
 #endif
 }
@@ -2456,6 +2466,14 @@ void PAddBackward(const std::vector<dtype*> &losses, int count, int dim,
             count, dim, in_count, drop_mask, drop_factor, in_loss_arr.value);
 }
 
+int NextTwoIntegerPowerNumber(int number) {
+    int result = 1;
+    while (number > result) {
+        result <<= 1;
+    }
+    return result;
+}
+
 __global__ void KernelSoftMaxLoss(const dtype **vals, dtype **losses,
         int *correct_count, int *answers, int batchsize, int count, int dim) {
     volatile __shared__ int opt_label;
@@ -2515,10 +2533,7 @@ void SoftMaxLoss(const std::vector<dtype*> &vals, std::vector<dtype*> &losses,
     if (dim > TPB) {
         abort();
     }
-    int thread_count = 1;
-    while (dim > thread_count) {
-        thread_count <<= 1;
-    }
+    int thread_count = NextTwoIntegerPowerNumber(dim);
     NumberPointerArray val_arr;
     val_arr.init((dtype**)vals.data(), vals.size());
     NumberPointerArray loss_arr;
@@ -2533,6 +2548,45 @@ void SoftMaxLoss(const std::vector<dtype*> &vals, std::vector<dtype*> &losses,
             batchsize,
             count,
             dim);
+}
+
+__global__ void Predict(const dtype *val, int dim, int *result) {
+    __shared__ volatile dtype shared_vals[TPB];
+    __shared__ volatile dtype shared_indexes[TPB];
+
+    int index = DeviceDefaultIndex();
+    shared_indexes[threadIdx.x] = threadIdx.x;
+    if (index < threadIdx.x) {
+        shared_vals[threadIdx.x] = val[threadIdx.x];
+    } else {
+        shared_vals[threadIdx.x] = -10000000.0f;
+    }
+    __syncthreads();
+
+    for (int i = (blockDim.x >> 1); i > 0; i >>= 1) {
+        if (shared_vals[threadIdx.x] > shared_vals[threadIdx.x + i]) {
+            shared_vals[threadIdx.x] = shared_vals[threadIdx.x + i];
+            shared_indexes[threadIdx.x] = threadIdx.x + i;
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        *result = shared_indexes[0];
+    }
+}
+
+int Predict(const dtype* val, int dim) {
+    if (dim > TPB) {
+        abort();
+    }
+
+    int thread_count = NextTwoIntegerPowerNumber(dim);
+    DeviceInt result;
+    result.init();
+    Predict<<<1, thread_count>>>(val, dim, result.value);
+    result.copyFromDeviceToHost();
+    return result.v;
 }
 
 __global__ void KernelSquareSum(const dtype *v, int len, dtype *global_sum,

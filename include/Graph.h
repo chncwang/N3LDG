@@ -188,9 +188,9 @@ class Graph {
             }
 
             for (PExecute e : cur_execs) {
-                profiler.BeginEvent("forward");
+                //profiler.BeginEvent("forward");
                 e->forward();
-                profiler.EndEvent();
+                //profiler.EndEvent();
                 execs.push_back(e);
             }
 
